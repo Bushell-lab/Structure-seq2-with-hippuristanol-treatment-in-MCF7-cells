@@ -1,16 +1,63 @@
+###This script was written by Joseph A.Waldron and produces panels 2B-D, 4A-C, S4A-J and S7B-C in Waldron et al. (2019) Genome Biology
+###Input data can be downloaded from the Gene Expression Omnibus (GEO) database accessions GSE134865 and GSE134888 which can be found at 
+###https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134865 and https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134888
+
 #load packages
 library(tidyverse)
-library(scales)
 library(viridis)
 
-#import functions----
-source("N:\\JWALDRON/R_scripts/functions.R")
+#set home directory----
+home <- '' #this needs to be set to the directory containing the data
 
-#import variables----
-source("N:\\JWALDRON/R_scripts/structure_seq_variables.R")
+#set variables----
+#posterior probability thresholds
+positive_change <- 0.25
+no_change <- 0.02
 
-#set directory----
-setwd('N:\\JWALDRON/Structure_seq/Paper/Figures/R/Stats/panels')
+#filter thresholds
+coverage <- 1
+fp_coverage <- 1.5
+
+#3' end trim length
+tp_trim <- 125
+
+#write functions----
+#makes a label from the output of either t.test or wilcox.test to include the p value and 95% confidence limits
+myP <- function(x) {
+  p <- as.numeric(x$p.value)
+  if (p < 2.2e-16) {
+    p_label <- "P < 2.2e-16"
+  } else {
+    if (p < 0.001) {
+      rounded_p <- formatC(p, format = "e", digits = 2)
+    } else {
+      rounded_p <- round(p, digits = 3)
+    }
+    p_label <- paste("P =", rounded_p)
+  }
+  lower <- round(x$conf.int[1], digits = 3)
+  upper <- round(x$conf.int[2], digits = 3)
+  if (lower == 0 | upper == 0) {
+    lower <- round(x$conf.int[1], digits = 4)
+    upper <- round(x$conf.int[2], digits = 4)
+    if (lower == 0 | upper == 0) {
+      lower <- round(x$conf.int[1], digits = 5)
+      upper <- round(x$conf.int[2], digits = 5)
+      if (lower == 0 | upper == 0) {
+        lower <- round(x$conf.int[1], digits = 6)
+        upper <- round(x$conf.int[2], digits = 6)
+      }
+    }
+  }
+  return(paste0(p_label, "\n95% conf int:\n", lower, "   ", upper))
+}
+
+#calculates axis limits to plot data minus the top and bottom n% of values
+myAxisLims <- function(x, n) {
+  upper_quan <- as.numeric(quantile (x, prob = 1 - (n / 100), na.rm=TRUE))
+  lower_quan <- as.numeric(quantile (x, prob = n / 100, na.rm=TRUE))
+  return(list(upper_lim = upper_quan, lower_lim = lower_quan))
+}
 
 #write themes----
 violin_theme <- theme_bw()+
@@ -28,74 +75,90 @@ scatter_theme <- theme_bw()+
         axis.title = element_text(size=20))
 
 #load data----
-#common data
-source("N:\\JWALDRON/R_scripts/Structure_seq_common_data.R")
+#coverage data
+coverage_data <- read_csv(file = file.path(home, 'plus_DMS_coverage.csv'), col_names = T) #download from GSE134865
+ctrl_fp_coverage_data <- read_csv(file = file.path(home, 'control_minus_DMS_fp_10_coverage.csv'), col_names = T) #download from GSE134865
+hipp_fp_coverage_data <- read_csv(file = file.path(home, 'hippuristanol_minus_DMS_fp_10_coverage.csv'), col_names = T) #download from GSE134865
+fp_coverage_data <- inner_join(ctrl_fp_coverage_data, hipp_fp_coverage_data, by = "transcript")
+rm(ctrl_fp_coverage_data, hipp_fp_coverage_data)
+
+#totals data
+totals_data <- read_tsv(file = file.path(home, 'penn-DE.mmdiffMCF7'), col_names = T, skip = 1) #download from GSE134888
+totals_data %>%
+  mutate(abundance = case_when(posterior_probability > positive_change ~ alpha1,
+                               posterior_probability < positive_change ~ alpha0)) %>%
+  rename(transcript = feature_id) %>%
+  select(transcript, abundance) -> abundance_data
+rm(totals_data)
+
+#translation data
+translation_data <- read_tsv(file = file.path(home, 'penn-DOD-gene.mmdiffMCF7'), col_names = T, skip = 1) #download from GSE134888
+translation_data %>%
+  rename(gene = feature_id) %>%
+  mutate(DOD = eta1_1 - eta1_2,
+         translation = factor(case_when(posterior_probability > positive_change & DOD < 0 ~ "4A-dep",
+                                        posterior_probability < no_change ~ "4A-indep"), levels = c("4A-dep", "4A-indep"), ordered = T)) -> translation_data
 
 translation_data %>%
   filter(translation == "4A-dep" | translation == "4A-indep" ) %>%
   select(gene, translation, posterior_probability) -> translation_list
 
-#stats
+#transcript to gene ID
+transcript_to_geneID <- read_tsv(file = file.path(home, 'MCF7_2015_transcript_to_gene_map.txt'), col_names = T) #download from GSE134865
+
+#stats data
+#uses a for loop to read in data for each region and each condition
+#download data from GSE134865
 stats_list <- list()
 for (region in c("fpUTR", "CDS", "tpUTR")) {
   for (condition in c("control", "hippuristanol")) {
     if (region == "tpUTR") {
-      df <- read_csv(file = file.path(home, paste0('raw_data/statistics/', condition, '_', region, '_', tp_trim, 'trim_20minlen_statistics.csv')), col_names = T)
+      df <- read_csv(file = file.path(home, paste0(condition, '_', region, '_', tp_trim, 'trim_20minlen_statistics.csv')), col_names = T)
     } else {
-      df <- read_csv(file = file.path(home, paste0('raw_data/statistics/', condition, '_', region, '_0trim_20minlen_statistics.csv')), col_names = T)
+      df <- read_csv(file = file.path(home, paste0(condition, '_', region, '_0trim_20minlen_statistics.csv')), col_names = T)
     }
     names(df) <- c("transcript", "max", "average", "std", "gini")
-    df$condition <- rep(condition, nrow(df))
-    df$region <- rep(region, nrow(df))
+    df$condition <- factor(rep(condition, nrow(df)), levels = c("control", "hippuristanol"), labels = c("Ctrl", "Hipp"), ordered = T)
+    df$region <- factor(rep(region, nrow(df)))
     stats_list[[paste(condition, region, sep = "_")]] <- df
   }
 }
 stats_data <- do.call("rbind", stats_list)
-stats_data$condition <- factor(stats_data$condition, levels = c("control", "hippuristanol"), labels = c("Ctrl", "Hipp"), ordered = T)
 
-#strandedness
-strands_list <- list()
-for (condition in c("control", "hippuristanol")) {
-  df <- read_csv(file = file.path(home, paste0('raw_data/folding/fpUTRs/', condition, '_fpUTR_strands.csv')), col_names = T)
-  df$condition <- rep(condition, nrow(df))
-  strands_list[[condition]] <- df
-}
-strandedness <- do.call("rbind", strands_list)
-strandedness$condition <- factor(strandedness$condition, levels = c("control", "hippuristanol"), labels = c("Ctrl", "Hipp"), ordered = T)
+#filter average data----
+#The following two pipes will remove transcripts which have an NA for average in either condition and any region
+#filter by coverage and 5' coverage (fp_coverage) and then pick the most abundant transcript per gene
 
-#MFE
-MFE_list <- list()
-for (condition in c("control", "hippuristanol")) {
-  df <- read_csv(file = file.path(home, paste0('raw_data/folding/fpUTRs/', condition, '_fpUTR_MFE.csv')), col_names = T)
-  df$condition <- rep(condition, nrow(df))
-  MFE_list[[condition]] <- df
-}
-MFE <- do.call("rbind", MFE_list)
-MFE$condition <- factor(MFE$condition, levels = c("control", "hippuristanol"), labels = c("Ctrl", "Hipp"), ordered = T)
-
-#filter and plot average data----
-#filter data
 stats_data %>%
   filter(is.na(average)) %>%
-  pull(transcript) -> remove_IDs # generates a list of transcript IDs which have an NA for average in either condition and any region
+  pull(transcript) -> remove_IDs
 
 stats_data %>%
   filter(!(transcript %in% remove_IDs)) %>%
   select(transcript, average, condition, region) %>%
   inner_join(coverage_data, by = "transcript") %>%
+  inner_join(fp_coverage_data, by = "transcript") %>%
   inner_join(abundance_data, by = "transcript") %>%
   inner_join(transcript_to_geneID, by = "transcript") %>%
-  filter(control_plus_DMS_coverage > coverage,
-         hippuristanol_plus_DMS_coverage > coverage,
+  filter(control_plus_DMS_1_coverage > coverage,
+         control_plus_DMS_2_coverage > coverage,
+         control_plus_DMS_3_coverage > coverage,
+         hippuristanol_plus_DMS_1_coverage > coverage,
+         hippuristanol_plus_DMS_2_coverage > coverage,
+         hippuristanol_plus_DMS_3_coverage > coverage,
          control_minus_DMS_fp_10_coverage > fp_coverage,
-         hippuristanol_minus_DMS_fp_10_coverage >fp_coverage) %>%
+         hippuristanol_minus_DMS_fp_10_coverage > fp_coverage) %>%
   group_by(gene) %>%
   top_n(n = 1, wt = abundance) %>% # selects most abundant transcript
   ungroup() -> filtered_average_data
   
 print(paste("average plots n = ", n_distinct(filtered_average_data$transcript)))
 
-#plot
+#plot average data----
+#the following for loop will create and export as pdfs, the following plots 
+#violin and scatter plot for control vs hippuristanol average reactivity
+#violin plot for 4A-dep vs 4A-indep delta reactivity
+#violin plots of control reactivity in high TE vs low TE mRNAs (top and bottom third of mRNAs based on ratio of polysomal to sub-polysomal RNA)
 for (region in c("fpUTR", "CDS", "tpUTR")) {
   filtered_average_data[filtered_average_data$region == region,] %>%
     select(transcript, condition, average) -> df
@@ -183,12 +246,12 @@ for (region in c("fpUTR", "CDS", "tpUTR")) {
     spread(key = condition, value = average) %>%
     inner_join(transcript_to_geneID, by = "transcript") %>%
     inner_join(translation_data, by = "gene") %>% 
-    mutate(TE_1 = mu_PD1_MCF7.gene - mu_SD1_MCF7.gene,
-           TE_2 = mu_PD1_MCF7.gene - mu_SD2_MCF7.gene,
-           TE_3 = mu_PD1_MCF7.gene - mu_SD3_MCF7.gene,
+    mutate(TE_1 = mu_PD1_MCF7.gene - mu_SD1_MCF7.gene, #subtracts normalised log values for sub-polysomal RNA from polysomal RNA in sample 1
+           TE_2 = mu_PD2_MCF7.gene - mu_SD2_MCF7.gene, #subtracts normalised log values for sub-polysomal RNA from polysomal RNA in sample 2
+           TE_3 = mu_PD3_MCF7.gene - mu_SD3_MCF7.gene, #subtracts normalised log values for sub-polysomal RNA from polysomal RNA in sample 3
            mean_TE = rowMeans(cbind(TE_1, TE_2, TE_3)),
-           translation = factor(case_when(mean_TE > quantile(mean_TE, 0.8) ~ "high TE",
-                                 mean_TE < quantile(mean_TE, 0.2) ~ "low TE"), levels = c("low TE", "high TE"), ordered = T)) %>%
+           translation = factor(case_when(mean_TE > quantile(mean_TE, 2/3) ~ "high TE",
+                                 mean_TE < quantile(mean_TE, 1/3) ~ "low TE"), levels = c("low TE", "high TE"), ordered = T)) %>%
     filter(translation == "low TE" | translation == "high TE") %>%
     select(transcript, Ctrl, translation) -> TE_data
   
@@ -218,8 +281,9 @@ for (region in c("fpUTR", "CDS", "tpUTR")) {
   dev.off()
 }
 
-#filter and plot gini data----
-#filter data
+#filter gini data----
+#The following two pipes will remove transcripts which have an NA for gini in either condition and any region
+#filter by coverage and 5' coverage (fp_coverage) and then pick the most abundant transcript per gene
 stats_data %>%
   filter(is.na(gini)) %>%
   pull(transcript) -> remove_IDs # generates a list of transcript IDs which have an NA for gini in either condition and any region
@@ -228,19 +292,26 @@ stats_data %>%
   filter(!(transcript %in% remove_IDs)) %>%
   select(transcript, gini, condition, region) %>%
   inner_join(coverage_data, by = "transcript") %>%
+  inner_join(fp_coverage_data, by = "transcript") %>%
   inner_join(abundance_data, by = "transcript") %>%
   inner_join(transcript_to_geneID, by = "transcript") %>%
-  filter(control_plus_DMS_coverage > coverage,
-         hippuristanol_plus_DMS_coverage > coverage,
+  filter(control_plus_DMS_1_coverage > coverage,
+         control_plus_DMS_2_coverage > coverage,
+         control_plus_DMS_3_coverage > coverage,
+         hippuristanol_plus_DMS_1_coverage > coverage,
+         hippuristanol_plus_DMS_2_coverage > coverage,
+         hippuristanol_plus_DMS_3_coverage > coverage,
          control_minus_DMS_fp_10_coverage > fp_coverage,
-         hippuristanol_minus_DMS_fp_10_coverage >fp_coverage) %>%
+         hippuristanol_minus_DMS_fp_10_coverage > fp_coverage) %>%
   group_by(gene) %>%
   top_n(n = 1, wt = abundance) %>% # selects most abundant transcript
   ungroup() -> filtered_gini_data
 
 print(paste("gini plots n = ", n_distinct(filtered_gini_data$transcript)))
 
-#plot
+#plot gini data----
+#the following for loop will create and export as pdfs, violin and scatter plot for control vs hippuristanol gini
+
 for (region in c("fpUTR", "CDS", "tpUTR")) {
   filtered_gini_data[filtered_gini_data$region == region,] %>%
     select(transcript, condition, gini) -> df
@@ -283,151 +354,138 @@ for (region in c("fpUTR", "CDS", "tpUTR")) {
   pdf(file = paste0(region, '_gini_scatter.pdf'), height = 4, width = 4)
   print(gini_scatter)
   dev.off()
-  
-  #fourAdep
-  df %>%
-    spread(key = condition, value = gini) %>%
-    mutate(delta = Hipp - Ctrl) %>%
-    inner_join(transcript_to_geneID, by = "transcript") %>%
-    inner_join(translation_list, by = "gene") -> translation_df
-  
-  n_fourAdep_transcripts <- n_distinct(translation_df$transcript[translation_df$translation == "4A-dep"])
-  print(paste("delta gini n =", n_fourAdep_transcripts))
-  
-  translation_df %>%
-    group_by(translation) %>%
-    top_n(wt = -posterior_probability, n = n_fourAdep_transcripts) %>%
-    ungroup() -> delta_df
-  
-  delta_axis_lims <- myAxisLims(delta_df$delta, 0.1)
-  
-  t <- wilcox.test(data = delta_df, delta ~ translation,
-                   paired = F,
-                   alternative = "two.sided",
-                   var.equal = F,
-                   conf.int = T)
-  p_label <- myP(t)
-  
-  delta_df %>%
-    ggplot(aes(x = translation, y = delta, fill = translation))+
-    geom_violin(alpha = 0.5)+
-    scale_fill_manual(values=c("#74add1", "#fdae61"))+
-    geom_boxplot(width = 0.2, outlier.shape=NA)+
-    ylab(expression(paste(Delta, " Gini coefficient")))+
-    ylim(c(delta_axis_lims$lower_lim, delta_axis_lims$upper_lim))+
-    violin_theme+
-    ggtitle(p_label)+
-    stat_summary(fun.y=mean, geom='point', shape=16, size=6) -> gini_delta_violin
-  
-  pdf(file = paste0(region, '_delta_gini_violin.pdf'), height = 4, width = 4)
-  print(gini_delta_violin)
-  dev.off()
-  
-  #TE
-  df %>%
-    spread(key = condition, value = gini) %>%
-    inner_join(transcript_to_geneID, by = "transcript") %>%
-    inner_join(translation_data, by = "gene") %>% 
-    mutate(TE_1 = mu_PD1_MCF7.gene - mu_SD1_MCF7.gene,
-           TE_2 = mu_PD1_MCF7.gene - mu_SD2_MCF7.gene,
-           TE_3 = mu_PD1_MCF7.gene - mu_SD3_MCF7.gene) %>%
-    mutate(mean_TE = rowMeans(cbind(TE_1, TE_2, TE_3)),
-           translation = factor(case_when(mean_TE > quantile(mean_TE, 0.8) ~ "high TE",
-                                   mean_TE < quantile(mean_TE, 0.2) ~ "low TE"), levels = c("low TE", "high TE"), ordered = T)) %>%
-    filter(translation == "low TE" | translation == "high TE") %>%
-    select(transcript, Ctrl, translation) -> TE_data
-  
-  print(paste(region, "high TE n =", n_distinct(TE_data$transcript[TE_data$translation == "high TE"])))
-  print(paste(region, "low TE n =", n_distinct(TE_data$transcript[TE_data$translation == "low TE"])))
-  
-  t <- wilcox.test(data = TE_data, Ctrl ~ translation,
-                   paired = F,
-                   alternative = "two.sided",
-                   var.equal = F,
-                   conf.int = T)
-  p_label <- myP(t)
-  
-  TE_data %>%
-    ggplot(aes(x = translation, y = Ctrl, fill = translation))+
-    geom_violin(alpha = 0.5)+
-    geom_boxplot(width = 0.2, outlier.shape=NA)+
-    scale_fill_manual(values=c("#7C71D8", "#FFE073"))+
-    ylab("Gini coefficient")+
-    ylim(gini_axis_lims$lower_lim, gini_axis_lims$upper_lim)+
-    violin_theme+
-    ggtitle(p_label)+
-    stat_summary(fun.y=mean, geom='point', shape=16, size=6) -> TE_violin
-  
-  pdf(file = paste0(region, '_TE_gini_violin.pdf'), height = 4, width = 4)
-  print(TE_violin)
-  dev.off()
 }
 
-#filter and plot MFE data----
+#MFE----
+#load data
+#uses a for loop to read in MFE data for each each condition for whole 5'UTRs (if 5'UTR <= 100) and windows (if 5'UTR > 100)
+#download data from GSE134865
+MFE_list <- list()
+for (condition in c("control", "hippuristanol")) {
+  whole_fpUTRs <- read_csv(file = file.path(home, paste(condition, 'fpUTR_MFE.csv', sep = "_")), col_names = T)
+  whole_fpUTRs %>%
+    mutate(condition = factor(rep(condition), levels = c("control", "hippuristanol"), labels = c("Ctrl", "Hipp"), ordered = T),
+           step = rep(0)) -> whole_fpUTRs
+  
+  windows <- read_csv(file = file.path(home, paste(condition, 'fpUTR_100_win_10_step_MFE.csv', sep = "_")), col_names = T)
+  windows %>%
+    mutate(step = as.numeric(str_replace(transcript, ".+_", "")),
+           transcript = str_replace(transcript, "_.+", ""),
+           condition = factor(rep(condition), levels = c("control", "hippuristanol"), labels = c("Ctrl", "Hipp"), ordered = T)) -> windows
+  
+  MFE_list[[condition]] <- bind_rows(whole_fpUTRs, windows)
+}
+MFE <- do.call("rbind", MFE_list)
+
+#filter
+#The following pipe will filter by coverage and 5' coverage (fp_coverage) and then pick the most abundant transcript per gene
+#and then calculate the minimum and average MFE
 MFE %>%
   inner_join(coverage_data, by = "transcript") %>%
+  inner_join(fp_coverage_data, by = "transcript") %>%
   inner_join(abundance_data, by = "transcript") %>%
   inner_join(transcript_to_geneID, by = "transcript") %>%
-  filter(control_plus_DMS_coverage > coverage,
-         hippuristanol_plus_DMS_coverage > coverage,
+  filter(control_plus_DMS_1_coverage > coverage,
+         control_plus_DMS_2_coverage > coverage,
+         control_plus_DMS_3_coverage > coverage,
+         hippuristanol_plus_DMS_1_coverage > coverage,
+         hippuristanol_plus_DMS_2_coverage > coverage,
+         hippuristanol_plus_DMS_3_coverage > coverage,
          control_minus_DMS_fp_10_coverage > fp_coverage,
-         hippuristanol_minus_DMS_fp_10_coverage >fp_coverage) %>%
+         hippuristanol_minus_DMS_fp_10_coverage > fp_coverage) %>%
   group_by(gene) %>%
-  top_n(n = 1, wt = abundance) %>%
-  ungroup()%>%
-  select(transcript, condition, Free_Energy) %>%
-  mutate(Free_Energy = Free_Energy - 0.1) -> filtered_MFE_data
+  top_n(n = 1, wt = abundance) %>% # selects most abundant transcript
+  ungroup() %>%
+  group_by(condition, transcript) %>%
+  summarise(avg_MFE = mean(Free_Energy),
+            min_MFE = min(Free_Energy)) -> summarised_MFE_data
 
-print(paste("MFE plots n =", n_distinct(filtered_MFE_data$transcript)))
+print(paste("MFE plots n =", n_distinct(summarised_MFE_data$transcript)))
 
-t <- wilcox.test(data = filtered_MFE_data, Free_Energy ~ condition,
+#plot minimum MFE
+t <- wilcox.test(data = summarised_MFE_data, min_MFE ~ condition,
                  paired = T,
                  alternative = "two.sided",
                  var.equal = F,
                  conf.int = T)
 p_label <- myP(t)
 
-filtered_MFE_data %>%
-  ggplot(aes(x = condition, y = -Free_Energy, fill = condition))+
+summarised_MFE_data %>%
+  ggplot(aes(x = condition, y = min_MFE, fill = condition))+
   geom_violin(alpha = 0.5)+
   geom_boxplot(width = 0.2, outlier.shape=NA)+
-  ylab(expression(paste("MFE (", Delta, "G)")))+
-  scale_y_continuous(trans=reverselog_trans(base=10), labels=trans_format("identity", function(x) -x))+
+  ylab(expression(paste("MFE (", Delta, "G kcal/mol)")))+
   violin_theme+
   ggtitle(p_label)+
-  stat_summary(fun.y=mean, geom='point', shape=16, size=6) -> MFE_violin
+  stat_summary(fun.y=mean, geom='point', shape=16, size=6) -> min_MFE_violin
 
-pdf(file = 'MFE_violin.pdf', height = 4, width = 4)
-MFE_violin
+pdf(file = 'min_MFE_violin.pdf', height = 4, width = 4)
+min_MFE_violin
 dev.off()
 
-filtered_MFE_data %>%
-  spread(key = condition, value = Free_Energy) %>%
-  ggplot(aes(-Ctrl, -Hipp))+
+summarised_MFE_data %>%
+  select(transcript, condition, min_MFE) %>%
+  spread(key = condition, value = min_MFE) %>%
+  ggplot(aes(Ctrl, Hipp))+
   stat_binhex(bins=40)+
   scale_fill_viridis('Transcripts')+
-  scale_x_continuous(trans=reverselog_trans(base=10),
-                     labels=trans_format("identity", function(x) -x))+
-  scale_y_continuous(trans=reverselog_trans(base=10),
-                     labels=trans_format("identity", function(x) -x))+
   theme_bw()+
   theme(legend.position = c(0.13,0.78),
         legend.title = element_blank(),
         axis.text = element_text(size=18), 
         axis.title = element_text(size=20))+
-  xlab(expression(paste("MFE (", Delta, "G), Ctrl")))+
-  ylab(expression(paste("MFE (", Delta, "G), Hipp")))+
-  geom_abline(color="red", size=1) -> MFE_scatter
+  xlab(expression(paste("MFE (", Delta, "G kcal/mol), Ctrl")))+
+  ylab(expression(paste("MFE (", Delta, "G kcal/mol), Hipp")))+
+  geom_abline(color="red", size=1) -> min_MFE_scatter
 
-pdf(file = 'MFE_scatter.pdf', height = 4, width = 4)
-MFE_scatter
+pdf(file = 'min_MFE_scatter.pdf', height = 4, width = 4)
+min_MFE_scatter
 dev.off()
 
-filtered_MFE_data %>%
-  inner_join(FASTA_compositions_list$fpUTR, by = "transcript") %>%
-  mutate(normalised_free_energy = Free_Energy / length) %>%
-  select(transcript, condition, normalised_free_energy) %>%
-  spread(key = condition, value = normalised_free_energy) %>%
+#plot average free energy
+t <- wilcox.test(data = summarised_MFE_data, avg_MFE ~ condition,
+                 paired = T,
+                 alternative = "two.sided",
+                 var.equal = F,
+                 conf.int = T)
+p_label <- myP(t)
+
+summarised_MFE_data %>%
+  ggplot(aes(x = condition, y = avg_MFE, fill = condition))+
+  geom_violin(alpha = 0.5)+
+  geom_boxplot(width = 0.2, outlier.shape=NA)+
+  ylab(expression(paste("MFE (", Delta, "G kcal/mol)")))+
+  violin_theme+
+  ggtitle(p_label)+
+  stat_summary(fun.y=mean, geom='point', shape=16, size=6) -> avg_MFE_violin
+
+pdf(file = 'avg_MFE_violin.pdf', height = 4, width = 4)
+avg_MFE_violin
+dev.off()
+
+summarised_MFE_data %>%
+  select(transcript, condition, avg_MFE) %>%
+  spread(key = condition, value = avg_MFE) %>%
+  ggplot(aes(Ctrl, Hipp))+
+  stat_binhex(bins=40)+
+  scale_fill_viridis('Transcripts')+
+  theme_bw()+
+  theme(legend.position = c(0.13,0.78),
+        legend.title = element_blank(),
+        axis.text = element_text(size=18), 
+        axis.title = element_text(size=20))+
+  xlab(expression(paste("MFE (", Delta, "G kcal/mol), Ctrl")))+
+  ylab(expression(paste("MFE (", Delta, "G kcal/mol), Hipp")))+
+  geom_abline(color="red", size=1) -> avg_MFE_scatter
+
+pdf(file = 'avg_MFE_scatter.pdf', height = 4, width = 4)
+avg_MFE_scatter
+dev.off()
+
+#plot delta of the minimum MFE 
+summarised_MFE_data %>%
+  select(transcript, condition, min_MFE) %>%
+  spread(key = condition, value = min_MFE) %>%
   mutate(delta = Hipp - Ctrl) %>%
   inner_join(transcript_to_geneID, by = "transcript") %>%
   inner_join(translation_list, by = "gene") -> MFE_df
@@ -435,7 +493,7 @@ filtered_MFE_data %>%
 n_fourAdep_transcripts <- n_distinct(MFE_df$transcript[MFE_df$translation == "4A-dep"])
 print(paste("delta MFE n =", n_fourAdep_transcripts))
 
-translation_df %>%
+MFE_df %>%
   group_by(translation) %>%
   top_n(wt = -posterior_probability, n = n_fourAdep_transcripts) %>%
   ungroup() -> MFE_delta
@@ -460,66 +518,141 @@ MFE_delta %>%
   ggtitle(p_label)+
   stat_summary(fun.y=mean, geom='point', shape=16, size=6) -> MFE_delta_violin
 
-pdf(file = file.path(paste0(getwd(), '/', 'MFE_delta_violin.pdf')), height = 4, width = 4)
+pdf(file = 'MFE_delta_violin.pdf', height = 4, width = 4)
 MFE_delta_violin
 dev.off()
 
-#filter and plot strandedness data----
+#strandedness----
+#load data
+#uses a for loop to read in strandedness data for each each condition for whole 5'UTRs (if 5'UTR <= 100) and windows (if 5'UTR > 100)
+#download data from GSE134865
+strandedness_list <- list()
+for (condition in c("control", "hippuristanol")) {
+  whole_fpUTRs <- read_csv(file = file.path(home, paste(condition, 'fpUTR_strands.csv', sep = "_")), col_names = T)
+  whole_fpUTRs %>%
+    mutate(condition = factor(rep(condition), levels = c("control", "hippuristanol"), labels = c("Ctrl", "Hipp"), ordered = T),
+           step = rep(0)) -> whole_fpUTRs
+  
+  windows <- read_csv(file = file.path(home, paste(condition, 'fpUTR_100_win_10_step_strands.csv', sep = "_")), col_names = T)
+  windows %>%
+    mutate(step = as.numeric(str_replace(transcript, ".+_", "")),
+           transcript = str_replace(transcript, "_.+", ""),
+           condition = factor(rep(condition), levels = c("control", "hippuristanol"), labels = c("Ctrl", "Hipp"), ordered = T)) -> windows
+  
+  strandedness_list[[condition]] <- bind_rows(whole_fpUTRs, windows)
+}
+strandedness <- do.call("rbind", strandedness_list)
+
+#filter
+#The following pipe will filter by coverage and 5' coverage (fp_coverage) and then pick the most abundant transcript per gene
+#and then calculate the maximum and average strandedness
+#filter and plot
 strandedness %>%
-  mutate(strandedness = double_percent * 100) %>%
   inner_join(coverage_data, by = "transcript") %>%
+  inner_join(fp_coverage_data, by = "transcript") %>%
   inner_join(abundance_data, by = "transcript") %>%
   inner_join(transcript_to_geneID, by = "transcript") %>%
-  filter(control_plus_DMS_coverage > coverage,
-         hippuristanol_plus_DMS_coverage > coverage,
+  filter(control_plus_DMS_1_coverage > coverage,
+         control_plus_DMS_2_coverage > coverage,
+         control_plus_DMS_3_coverage > coverage,
+         hippuristanol_plus_DMS_1_coverage > coverage,
+         hippuristanol_plus_DMS_2_coverage > coverage,
+         hippuristanol_plus_DMS_3_coverage > coverage,
          control_minus_DMS_fp_10_coverage > fp_coverage,
-         hippuristanol_minus_DMS_fp_10_coverage >fp_coverage) %>%
+         hippuristanol_minus_DMS_fp_10_coverage > fp_coverage) %>%
   group_by(gene) %>%
-  top_n(n = 1, wt = abundance) %>%
-  ungroup()%>%
-  select(transcript, condition, strandedness) -> filtered_strandedness_data
+  top_n(n = 1, wt = abundance) %>% # selects most abundant transcript
+  ungroup() %>%
+  group_by(condition, transcript) %>%
+  summarise(avg_strandedness = mean(double_percent) * 100,
+            max_strandedness = max(double_percent) * 100) -> summarised_strandedness_data
 
-print(paste("strandedness plots n =", n_distinct(filtered_strandedness_data$transcript)))
+print(paste("strandedness plots n =", n_distinct(summarised_strandedness_data$transcript)))
 
-t <- wilcox.test(data = filtered_strandedness_data, strandedness ~ condition,
+#plot maximum strandedness
+t <- wilcox.test(data = summarised_strandedness_data, max_strandedness ~ condition,
                  paired = T,
                  alternative = "two.sided",
                  var.equal = F,
                  conf.int = T)
 p_label <- myP(t)
 
-filtered_strandedness_data %>%
-  ggplot(aes(x = condition, y = strandedness, fill = condition))+
+summarised_strandedness_data %>%
+  ggplot(aes(x = condition, y = max_strandedness, fill = condition))+
   geom_violin(alpha = 0.5)+
   geom_boxplot(width = 0.2, outlier.shape=NA)+
   ylab("strandedness (%)")+
-  ylim(c(10,90))+
   violin_theme+
   ggtitle(p_label)+
-  stat_summary(fun.y=mean, geom='point', shape=16, size=6) -> strandedness_violin
+  stat_summary(fun.y=mean, geom='point', shape=16, size=6) -> max_strandedness_violin
 
-pdf(file = 'strandedness_violin.pdf', height = 4, width = 4)
-strandedness_violin
+pdf(file = 'max_strandedness_violin.pdf', height = 4, width = 4)
+max_strandedness_violin
 dev.off()
 
-filtered_strandedness_data %>%
-  spread(key = condition, value = strandedness) %>%
+summarised_strandedness_data %>%
+  select(transcript, condition, max_strandedness) %>%
+  spread(key = condition, value = max_strandedness) %>%
   ggplot(aes(Ctrl, Hipp))+
   stat_binhex(bins=40)+
   scale_fill_viridis('Transcripts')+
-  xlim(c(10,90))+
-  ylim(c(10,90))+
-  scatter_theme+
+  theme_bw()+
+  theme(legend.position = c(0.13,0.78),
+        legend.title = element_blank(),
+        axis.text = element_text(size=18), 
+        axis.title = element_text(size=20))+
   xlab("strandedness (%), Ctrl")+
   ylab("strandedness (%), Hipp")+
-  geom_abline(color="red", size=1) -> strandedness_scatter
+  geom_abline(color="red", size=1) -> max_strandedness_scatter
 
-pdf(file = 'strandedness_scatter.pdf', height = 4, width = 4)
-strandedness_scatter
+pdf(file = 'max_strandedness_scatter.pdf', height = 4, width = 4)
+max_strandedness_scatter
 dev.off()
 
-filtered_strandedness_data %>%
-  spread(key = condition, value = strandedness) %>%
+#plot average strandedness
+t <- wilcox.test(data = summarised_strandedness_data, avg_strandedness ~ condition,
+                 paired = T,
+                 alternative = "two.sided",
+                 var.equal = F,
+                 conf.int = T)
+p_label <- myP(t)
+
+summarised_strandedness_data %>%
+  ggplot(aes(x = condition, y = avg_strandedness, fill = condition))+
+  geom_violin(alpha = 0.5)+
+  geom_boxplot(width = 0.2, outlier.shape=NA)+
+  ylab("strandedness (%)")+
+  violin_theme+
+  ggtitle(p_label)+
+  stat_summary(fun.y=mean, geom='point', shape=16, size=6) -> avg_strandedness_violin
+
+pdf(file = 'avg_strandedness_violin.pdf', height = 4, width = 4)
+avg_strandedness_violin
+dev.off()
+
+summarised_strandedness_data %>%
+  select(transcript, condition, avg_strandedness) %>%
+  spread(key = condition, value = avg_strandedness) %>%
+  ggplot(aes(Ctrl, Hipp))+
+  stat_binhex(bins=40)+
+  scale_fill_viridis('Transcripts')+
+  theme_bw()+
+  theme(legend.position = c(0.13,0.78),
+        legend.title = element_blank(),
+        axis.text = element_text(size=18), 
+        axis.title = element_text(size=20))+
+  xlab("strandedness (%), Ctrl")+
+  ylab("strandedness (%), Hipp")+
+  geom_abline(color="red", size=1) -> avg_strandedness_scatter
+
+pdf(file = 'avg_strandedness_scatter.pdf', height = 4, width = 4)
+avg_strandedness_scatter
+dev.off()
+
+#plot delta of the maximum strandedness
+summarised_strandedness_data %>%
+  select(transcript, condition, max_strandedness) %>%
+  spread(key = condition, value = max_strandedness) %>%
   mutate(delta = Hipp - Ctrl) %>%
   inner_join(transcript_to_geneID, by = "transcript") %>%
   inner_join(translation_list, by = "gene") -> strandedness_df
