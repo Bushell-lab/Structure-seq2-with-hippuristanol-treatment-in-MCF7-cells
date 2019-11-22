@@ -1,18 +1,68 @@
+###This script was written by Joseph A.Waldron and produces panels 1C, 2E, 4D, S5A-C, S5G-H, S6A and S7D in Waldron et al. (2019) Genome Biology
+###Input data can be downloaded from the Gene Expression Omnibus (GEO) database accessions GSE134865 and GSE134888 which can be found at 
+###https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134865 and https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134888
+
 #load packages
 library(tidyverse)
 library(grid)
 library(gridExtra)
 library(parallel)
 
-#import functions----
-source("N:\\JWALDRON/R_scripts/functions.R")
+#set home directory----
+home <- '' #this needs to be set to the directory containing the data
 
-#import variables----
-source("N:\\JWALDRON/R_scripts/structure_seq_variables.R")
+#set variables----
+#posterior probability thresholds
+positive_change <- 0.25
+no_change <- 0.02
+
+#filter thresholds
+coverage <- 1
+fp_coverage <- 1.5
+
+#3' end trim length
+tp_trim <- 125
+
+#min length of each UTR/CDS
 min_length <- 100
 
-#set directory----
-setwd('N:\\JWALDRON/Structure_seq/Paper/Figures/R/positional_changes/panels')
+#set the number of bins for each region
+fpUTR_bins <- 25
+CDS_bins <- 50
+tpUTR_bins <- 25
+
+#write functions----
+#exports just the legend of a plot
+myLegend <- function(a.gplot){
+  tmp <- ggplot_gtable(ggplot_build(a.gplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)}
+
+#reads in a csv file (for use with parLapply)
+read_react_csv <- function(k){
+  df <- read.csv(file = k, header = T)
+  df$transcript <- rep(k, nrow(df))
+  return(df)
+}
+
+#Returns transcript ID (for use with parLapply)
+get_transcript_ID <- function(x) {
+  transcript <- str_replace(x, "_.+", "")
+  return(transcript)
+}
+
+#calculate bins
+calculate_bins <- function(x, n) {
+  bins <- n
+  cut_size <- 1 / bins
+  breaks <- seq(0, 1, cut_size)
+  start <- cut_size / 2
+  stop <- 1 - start
+  bin_centres <- seq(start, stop, cut_size)
+  bin <- as.numeric(cut(x, breaks, include.lowest = F, labels = bin_centres))
+  return(bin)
+}
 
 #create themes----
 my_theme <- theme_bw()+
@@ -39,24 +89,64 @@ no_labels_theme <- my_theme+
         axis.text = element_blank())
 
 #load data----
-#common data
-source("N:\\JWALDRON/R_scripts/Structure_seq_common_data.R")
+#coverage data
+coverage_data <- read_csv(file = file.path(home, 'plus_DMS_coverage.csv'), col_names = T) #download from GSE134865
+ctrl_fp_coverage_data <- read_csv(file = file.path(home, 'control_minus_DMS_fp_10_coverage.csv'), col_names = T) #download from GSE134865
+hipp_fp_coverage_data <- read_csv(file = file.path(home, 'hippuristanol_minus_DMS_fp_10_coverage.csv'), col_names = T) #download from GSE134865
+fp_coverage_data <- inner_join(ctrl_fp_coverage_data, hipp_fp_coverage_data, by = "transcript")
+rm(ctrl_fp_coverage_data, hipp_fp_coverage_data)
 
+#totals data
+totals_data <- read_tsv(file = file.path(home, 'penn-DE.mmdiffMCF7'), col_names = T, skip = 1) #download from GSE134888
+totals_data %>%
+  mutate(abundance = case_when(posterior_probability > positive_change ~ alpha1,
+                               posterior_probability < positive_change ~ alpha0)) %>%
+  rename(transcript = feature_id) %>%
+  select(transcript, abundance) -> abundance_data
+rm(totals_data)
+
+#translation data
+translation_data <- read_tsv(file = file.path(home, 'penn-DOD-gene.mmdiffMCF7'), col_names = T, skip = 1) #download from GSE134888
+translation_data %>%
+  rename(gene = feature_id) %>%
+  mutate(DOD = eta1_1 - eta1_2,
+         translation = factor(case_when(posterior_probability > positive_change & DOD < 0 ~ "4A-dep",
+                                        posterior_probability < no_change ~ "4A-indep"), levels = c("4A-dep", "4A-indep"), ordered = T)) -> translation_data
+
+#transcript to gene ID
+transcript_to_geneID <- read_tsv(file = file.path(home, 'MCF7_2015_transcript_to_gene_map.txt'), col_names = T) #download from GSE134865
+
+#FASTA composition data
+#uses a for loop to load composition data for each spliced fasta
+#download data from GSE134865
+FASTA_compositions_list <- list()
+for (region in c("fpUTR", "CDS", "tpUTR")) {
+  df <- read_csv(file = file.path(home, paste0('MCF7_2015_', region, 's_composition.csv')), col_names = T)
+  df$region <- rep(region, nrow(df))
+  FASTA_compositions_list[[region]] <- df
+}
+FASTA_compositions <- do.call("rbind", FASTA_compositions_list)
+
+#make a list of filtered transcripts----
+#the following pipe makes a vector of all transcript IDs that have a 5'UTR, CDS and 3'UTR more than 100nt in length,
+#have coverage and 5' coverage above thresholds, and are the most abundant transcript 
 FASTA_compositions %>%
   select(transcript, length, region) %>%
   spread(key = region, value = length) %>%
   rename(fpUTR_length = fpUTR,
          CDS_length = CDS,
          tpUTR_length = tpUTR) %>%
-  filter(!(is.na(fpUTR_length)) & !(is.na(CDS_length)) & !(is.na(tpUTR_length))) -> FASTA_compositions #this last line ensures all transcripts have a 5'UTR, CDS and 'UTR
-
-#filter transcripts
-FASTA_compositions %>%
+  filter(!(is.na(fpUTR_length)) & !(is.na(CDS_length)) & !(is.na(tpUTR_length))) %>% #ensures all transcripts have a 5'UTR, CDS and 'UTR
   inner_join(coverage_data, by = "transcript") %>%
+  inner_join(fp_coverage_data, by = "transcript") %>%
   inner_join(abundance_data, by = "transcript") %>%
   inner_join(transcript_to_geneID, by = "transcript") %>%
-  filter(control_plus_DMS_coverage > coverage,
-         hippuristanol_plus_DMS_coverage > coverage,
+  filter(control_plus_DMS_1_coverage > coverage,
+         control_plus_DMS_2_coverage > coverage,
+         control_plus_DMS_3_coverage > coverage,
+         hippuristanol_plus_DMS_1_coverage > coverage,
+         hippuristanol_plus_DMS_2_coverage > coverage,
+         hippuristanol_plus_DMS_3_coverage > coverage,
          control_minus_DMS_fp_10_coverage > fp_coverage,
          hippuristanol_minus_DMS_fp_10_coverage > fp_coverage,
          fpUTR_length > min_length,
@@ -67,32 +157,24 @@ FASTA_compositions %>%
   ungroup() %>%
   pull(transcript) -> filtered_transcripts
 
-#read in reactivity data----
-read_react_csv <- function(k){
-  df <- read.csv(file = k, header = T)
-  df$transcript <- rep(k, nrow(df))
-  return(df)
-}
+#read in csvs with parLapply----
+#uses a for loop to read in the csv for every transcript in filtered_transcripts for each condition and region
+#a directory containing all transcript csv files for every condition and region can be created by running the react_to_csv.py script on the relevant react file
+#react files can be downloaded from GSE134865 and react_to_csv.py is available at https://github.com/StructureFold2/StructureFold2
 
-get_transcript_ID <- function(x) {
-  transcript <- str_replace(x, "_.+", "")
-  return(transcript)
-}
-
-# Calculate the number of cores
+#Calculate the number of cores
 no_cores <- detectCores() - 1
 
-#read in csvs
 reactivity_list <- list()
 for (region in c("fpUTR", "CDS", "tpUTR")) {
   for (condition in c("control", "hippuristanol")) {
-    setwd(paste0('N:\\JWALDRON/Structure_seq/MCF7_2015/react_files/csvs/', condition, '_', region, '_all_csvs'))
-    csv_list <- dir(pattern = "*.csv") # creates the list of all the csv files in the directory
+    setwd(file.path(home, paste(condition, region, 'all_csvs', sep = "_")))
+    csv_list <- dir(pattern = "*.csv") #creates a list of all the csv files in the directory
     filtered_list <- csv_list[lapply(csv_list, get_transcript_ID) %in% filtered_transcripts] #filters the csv list to include only the filtered transcript IDs
-    cl <- makeCluster(no_cores)# Initiate cluster
+    cl <- makeCluster(no_cores) #Initiates cluster
     alist <- parLapply(cl, filtered_list, read_react_csv) #reads in all the csvs from the filtered list and stores them in alist
-    stopCluster(cl)# Stop cluster
-    df <- do.call("rbind", alist) # combines the list of csv files into a data frame
+    stopCluster(cl) #Stops cluster
+    df <- do.call("rbind", alist) #combines the list of csv files into a data frame
     df$condition <- rep(condition, nrow(df))
     df$region <- rep(region, nrow(df))
     df$transcript <- str_replace(df$transcript, "_.+", "")
@@ -102,9 +184,11 @@ for (region in c("fpUTR", "CDS", "tpUTR")) {
 reactivity_data <- do.call("rbind", reactivity_list)
 rm(reactivity_list)
 
-setwd('N:\\JWALDRON/Structure_seq/Paper/Figures/R/Positional_changes/panels')
+setwd(home)
 
 #bin data----
+#the following three pipes bin the data for each region and calculate the
+#mean control, hippuristanol and delta reactivity for each bin within each transcript
 #fpUTR
 reactivity_data[reactivity_data$region == "fpUTR",] %>%
   spread(key = condition, value = Reactivity) %>%
@@ -113,7 +197,7 @@ reactivity_data[reactivity_data$region == "fpUTR",] %>%
   mutate(length = rep(max(Position))) %>% #calculates 5'UTR length
   ungroup() %>%
   mutate(normalised_position = Position / length,
-         bin = calculate_bins(normalised_position, 25)) %>% #calculates bins
+         bin = calculate_bins(normalised_position, fpUTR_bins)) %>% #calculates bins
   group_by(transcript, bin) %>%
   summarise(control = mean(control, na.rm = T),
             hippuristanol = mean(hippuristanol, na.rm = T),
@@ -129,7 +213,7 @@ reactivity_data[reactivity_data$region == "CDS",] %>%
   mutate(length = rep(max(Position))) %>% #calculates CDS length
   ungroup() %>%
   mutate(normalised_position = Position / length,
-         bin = calculate_bins(normalised_position, 50)) %>% #calculates bins
+         bin = calculate_bins(normalised_position, CDS_bins)) %>% #calculates bins
   group_by(transcript, bin) %>%
   summarise(control = mean(control, na.rm = T),
             hippuristanol = mean(hippuristanol, na.rm = T),
@@ -147,7 +231,7 @@ reactivity_data[reactivity_data$region == "tpUTR",] %>%
   mutate(trimmed_length = rep(max(Position))) %>% # recalculates length
   ungroup() %>%
   mutate(normalised_position = Position / trimmed_length,
-         bin = calculate_bins(normalised_position, 25)) %>% #calculates bins
+         bin = calculate_bins(normalised_position, tpUTR_bins)) %>% #calculates bins
   group_by(transcript, bin) %>%
   summarise(control = mean(control, na.rm = T),
             hippuristanol = mean(hippuristanol, na.rm = T),
@@ -159,6 +243,8 @@ binned_data <- bind_rows(fpUTR_binned, CDS_binned, tpUTR_binned)
 print(paste("all transcripts binned n =", n_distinct(binned_data$transcript)))
 
 #calculate single nt reactivity----
+#the following for loop extracts the first (FP) and last (TP) 60nt from each region,
+#after removing the final 125nt from the 3'UTR
 single_nt_list <- list()
 for (region in c("fpUTR", "CDS", "tpUTR")) {
   reactivity_data[reactivity_data$region == region,] %>%
@@ -168,13 +254,13 @@ for (region in c("fpUTR", "CDS", "tpUTR")) {
     arrange(transcript, Position) %>% 
     mutate(window = rep(seq(2,59, by = 3), each = 3, times = n_distinct(transcript))) -> single_nt_list[[paste0(region, "_FP")]]
   
-  if (region == "tpUTR") {#as data is randomly primed the last n nt of each transcript is trimmed prior to any analysis
+  if (region == "tpUTR") {#the last n nt of each transcript is trimmed prior to any analysis
     reactivity_data[reactivity_data$region == region,] %>%
       spread(key = condition, value = Reactivity) %>%
       mutate(delta = hippuristanol - control) %>%
       group_by(transcript) %>%
-      top_n(n = tp_trim + 60, wt = Position) %>%
-      top_n(n = -60, wt = Position) %>%
+      top_n(n = tp_trim + 60, wt = Position) %>% #extracts the last 60nt + 125nt to trim
+      top_n(n = -60, wt = Position) %>% #removes the last 125nt
       arrange(transcript, Position) %>%
       mutate(window = rep(seq(-59,-2, by = 3), each = 3, times = n_distinct(transcript))) %>%
       ungroup() -> single_nt_list[[paste0(region, "_TP")]]
@@ -183,7 +269,7 @@ for (region in c("fpUTR", "CDS", "tpUTR")) {
       spread(key = condition, value = Reactivity) %>%
       mutate(delta = hippuristanol - control) %>%
       group_by(transcript) %>%
-      top_n(n = 60, wt = Position) %>%
+      top_n(n = 60, wt = Position) %>% #extracts the last 60nt
       arrange(transcript, Position) %>%
       mutate(window = rep(seq(-59,-2, by = 3), each = 3, times = n_distinct(transcript))) %>%
       ungroup() -> single_nt_list[[paste0(region, "_TP")]]
@@ -194,23 +280,22 @@ single_nt_data <- do.call("rbind", single_nt_list)
 print(paste("all transcripts single_nt n =", n_distinct(single_nt_data$transcript)))
 
 #plot binned reactivity for all transcripts----
-#calculate P values
-binned_p_list <- list()
 
+#calculate 95% confidence intervals
+binned_intervals_list <- list()
 for (region in c("fpUTR", "CDS", "tpUTR")) {
   df <- binned_data[binned_data$region == region,]
   for (n in 1:max(df$bin)) {
     bin_n <- df[df$bin == n,]
     
     t <- t.test(bin_n$hippuristanol, bin_n$control, paired = T, conf.int = T)
-    p <- t$p.value
     upper <- t$conf.int[[1]]
     lower <- t$conf.int[[2]]
     
-    binned_p_list[[paste(region, n, sep = "_")]] <- data.frame(region = region, bin = n, p = p, upper = upper, lower =lower)
+    binned_intervals_list[[paste(region, n, sep = "_")]] <- data.frame(region = region, bin = n, upper = upper, lower =lower)
   }
 }
-binned_p_data <- do.call("rbind", binned_p_list)
+binned_intervals_data <- do.call("rbind", binned_intervals_list)
 
 #summarise data
 binned_data %>%
@@ -218,7 +303,7 @@ binned_data %>%
   summarise(average_delta = mean(net_change, na.rm = T),
             average_control = mean(control, na.rm = T),
             average_hippuristanol = mean(hippuristanol, na.rm = T)) %>%
-  inner_join(binned_p_data, by = c("region", "bin")) %>%
+  inner_join(binned_intervals_data, by = c("region", "bin")) %>%
   ungroup() -> summarised_binned_data
 
 #calculate axis limits
@@ -284,22 +369,21 @@ grid.arrange(binned_raw_plot_list$fpUTR, binned_raw_plot_list$CDS, binned_raw_pl
 dev.off()
 
 #plot single nt reactivity for all transcripts----
-#calculate p values and 95% confidence intervals
-single_nt_p_list <- list()
+
+#calculate and 95% confidence intervals
+single_nt_intervals_list <- list()
 for (region in c("fpUTR", "CDS", "tpUTR")) {
   for (n in c(seq(-59,-2, by = 3), seq(2,59, by = 3))) {
     window_n <- single_nt_data[single_nt_data$region == region & single_nt_data$window == n,]
     
     t <- t.test(window_n$hippuristanol, window_n$control, paired = T, conf.int = T)
-    p <- t$p.value
     upper <- t$conf.int[[1]]
     lower <- t$conf.int[[2]]
     
-    single_nt_p_list[[paste(region, n, sep = "_")]] <- data.frame(region = region, window = n, p = p, upper = upper, lower =lower)
+    single_nt_intervals_list[[paste(region, n, sep = "_")]] <- data.frame(region = region, window = n, upper = upper, lower =lower)
   }
 }
-
-single_nt_p_data <- do.call("rbind", single_nt_p_list)
+single_nt_intervals_data <- do.call("rbind", single_nt_intervals_list)
 
 #summarise data
 single_nt_data %>%
@@ -307,7 +391,7 @@ single_nt_data %>%
   summarise(average_delta = mean(delta, na.rm = T),
             average_control = mean(control, na.rm = T),
             average_hippuristanol = mean(hippuristanol, na.rm = T)) %>%
-  inner_join(single_nt_p_data, by = c("region", "window")) %>%
+  inner_join(single_nt_intervals_data, by = c("region", "window")) %>%
   ungroup() %>%
   mutate(location = case_when(window > 0 ~ "Start",
                               window < 0 ~ "End"))-> summarised_single_nt_data
@@ -401,21 +485,22 @@ grid.arrange(ctrl_hipp_legend)
 dev.off()
 
 #TE data----
-#calculate TE
+#calculate TE for all filtered transcripts
 transcript_to_geneID %>%
   filter(transcript %in% filtered_transcripts) %>%
   inner_join(translation_data, by = "gene") %>%
-  mutate(TE_1 = mu_PD1_MCF7.gene - mu_SD1_MCF7.gene,
-         TE_2 = mu_PD1_MCF7.gene - mu_SD2_MCF7.gene,
-         TE_3 = mu_PD1_MCF7.gene - mu_SD3_MCF7.gene,
-         mean_TE = rowMeans(cbind(TE_1, TE_2, TE_3))) -> TE_data
+  mutate(TE_1 = mu_PD1_MCF7.gene - mu_SD1_MCF7.gene, #subtracts normalised log values for sub-polysomal RNA from polysomal RNA in sample 1
+         TE_2 = mu_PD2_MCF7.gene - mu_SD2_MCF7.gene, #subtracts normalised log values for sub-polysomal RNA from polysomal RNA in sample 2
+         TE_3 = mu_PD3_MCF7.gene - mu_SD3_MCF7.gene, #subtracts normalised log values for sub-polysomal RNA from polysomal RNA in sample 3
+         mean_TE = rowMeans(cbind(TE_1, TE_2, TE_3))) -> TE_data #calculates the mean of TE_1-3
 
+#get transcript IDs of the top and bottom third of transcripts based on TE
 TE_data %>%
-  filter(mean_TE > quantile(TE_data$mean_TE, 0.8)) %>%
+  filter(mean_TE > quantile(TE_data$mean_TE, 2/3)) %>%
   pull(transcript) -> high_TE_transcripts
 
 TE_data %>%
-  filter(mean_TE < quantile(TE_data$mean_TE, 0.2)) %>%
+  filter(mean_TE < quantile(TE_data$mean_TE, 1/3)) %>%
   pull(transcript) -> low_TE_transcripts
 
 #merge with binned reactivity data
@@ -439,8 +524,9 @@ print(paste("low TE single_nt n =", n_distinct(TE_single_nt$transcript[TE_single
 print(paste("high TE single_nt n =", n_distinct(TE_single_nt$transcript[TE_single_nt$translation == "high_TE"])))
 
 #plot binned reactivity for TE transcripts----
-#calculate P values
-binned_p_list <- list()
+
+#calculate 95% confidence intervals
+binned_intervals_list <- list()
 
 for (region in c("fpUTR", "CDS", "tpUTR")) {
   df <- TE_binned[TE_binned$region == region,]
@@ -448,14 +534,13 @@ for (region in c("fpUTR", "CDS", "tpUTR")) {
     bin_n <-  df[df$bin == n,]
     
     t <- t.test(data = bin_n, control ~ translation, paired = F, conf.int = T)
-    p <- t$p.value
     upper <- t$conf.int[[1]]
     lower <- t$conf.int[[2]]
     
-    binned_p_list[[paste(region, n, sep = "_")]] <- data.frame(region = region, bin = n, p = p, upper = upper, lower =lower)
+    binned_intervals_list[[paste(region, n, sep = "_")]] <- data.frame(region = region, bin = n, upper = upper, lower =lower)
   }
 }
-binned_p_data <- do.call("rbind", binned_p_list)
+binned_intervals_data <- do.call("rbind", binned_intervals_list)
 
 #summarise data
 TE_binned %>%
@@ -463,7 +548,7 @@ TE_binned %>%
   summarise(average_control = mean(control, na.rm = T))  %>%
   spread(key = translation, value = average_control) %>%
   mutate(delta = low_TE - high_TE) %>%
-  inner_join(binned_p_data, by = c("region", "bin")) %>%
+  inner_join(binned_intervals_data, by = c("region", "bin")) %>%
   ungroup() -> summarised_TE_binned
 
 #calculate axis limits
@@ -530,22 +615,21 @@ grid.arrange(binned_raw_plot_list$fpUTR, binned_raw_plot_list$CDS, binned_raw_pl
 dev.off()
 
 #plot single nt reactivity for TE transcripts----
-#calculate p values and 95% confidence intervals
-single_nt_p_list <- list()
+
+#calculate 95% confidence intervals
+single_nt_intervals_list <- list()
 for (region in c("fpUTR", "CDS", "tpUTR")) {
   for (n in c(seq(-59,-2, by = 3), seq(2,59, by = 3))) {
     window_n <- TE_single_nt[TE_single_nt$region == region & TE_single_nt$window == n,]
     
     t <- t.test(data = window_n, control ~ translation, paired = F, conf.int = T)
-    p <- t$p.value
     upper <- t$conf.int[[1]]
     lower <- t$conf.int[[2]]
     
-    single_nt_p_list[[paste(region, n, sep = "_")]] <- data.frame(region = region, window = n, p = p, upper = upper, lower =lower)
+    single_nt_intervals_list[[paste(region, n, sep = "_")]] <- data.frame(region = region, window = n, upper = upper, lower =lower)
   }
 }
-
-single_nt_p_data <- do.call("rbind", single_nt_p_list)
+single_nt_intervals_data <- do.call("rbind", single_nt_intervals_list)
 
 #summarise data
 TE_single_nt %>%
@@ -553,7 +637,7 @@ TE_single_nt %>%
   summarise(average_control = mean(control, na.rm = T)) %>%
   spread(key = translation, value = average_control) %>%
   mutate(delta = low_TE - high_TE) %>%
-  inner_join(single_nt_p_data, by = c("region", "window")) %>%
+  inner_join(single_nt_intervals_data, by = c("region", "window")) %>%
   ungroup() %>%
   mutate(location = case_when(window > 0 ~ "Start",
                               window < 0 ~ "End")) -> summarised_TE_single_nt
@@ -564,6 +648,7 @@ raw_ylim <- max(c(summarised_TE_single_nt$high_TE, summarised_TE_single_nt$low_T
 lower_delta_ylim <- min(c(summarised_TE_single_nt$delta, summarised_TE_single_nt$upper))
 upper_delta_ylim <- max(c(summarised_TE_single_nt$delta, summarised_TE_single_nt$lower))
 
+#plot
 single_nt_raw_plot_list <- list()
 single_nt_delta_plot_list <- list()
 
@@ -651,57 +736,40 @@ dev.off()
 
 #aTIS transcripts----
 #read in gene names for MCF7 transcripts
-MCF7_IDs <- read_csv(file = "N:\\JWALDRON/Indexes/MCF7/2015/transcript_gene_maps/MCF7_2015_ensembl_IDs.csv", col_names = T)
+MCF7_IDs <- read_csv(file = file.path(home, "MCF7_2015_ensembl_IDs.csv"), col_names = T) #download from GSE134865
 
-#read in uORF scores
-uORF_scores <- read_csv(file = "N:\\JWALDRON/Structure_seq/refseq/playground/uORF_scores.csv")
+#read in uTIS scores
+uTIS_scores <- read_csv(file = file.path(home, "uTIS_scores.csv"), col_names = T) #download from GSE134865 (original data taken from Gao et al. (2015) Nature methods)
 
-uORF_scores %>%
+#extract filtered transcript IDs with a uTIS score of 0
+uTIS_scores %>%
   inner_join(MCF7_IDs, by = "Ensembl_gene_symbol") %>%
-  filter(transcript %in% filtered_transcripts & uORF_score == 0) %>%
+  filter(transcript %in% filtered_transcripts & uTIS_score == 0) %>%
   pull(transcript) -> aTIS_transcripts
 
 #merge with reactivity data
 binned_data %>%
-  mutate(uORF = case_when(transcript %in% aTIS_transcripts ~ "aTIS",
+  mutate(uTIS = case_when(transcript %in% aTIS_transcripts ~ "aTIS",
                           !(transcript %in% aTIS_transcripts) ~ "all_transcripts")) -> aTIS_binned
 
-print(paste("aTIS binned n = ", n_distinct(aTIS_binned$transcript[aTIS_binned$uORF == "aTIS"])))
-print(paste("aTIS all transcripts binned n = ", n_distinct(aTIS_binned$transcript[aTIS_binned$uORF == "all_transcripts"])))
+print(paste("aTIS binned n = ", n_distinct(aTIS_binned$transcript[aTIS_binned$uTIS == "aTIS"])))
+print(paste("aTIS all transcripts binned n = ", n_distinct(aTIS_binned$transcript[aTIS_binned$uTIS == "all_transcripts"])))
 
 single_nt_data %>%
-  mutate(uORF = case_when(transcript %in% aTIS_transcripts ~ "aTIS",
+  mutate(uTIS = case_when(transcript %in% aTIS_transcripts ~ "aTIS",
                           !(transcript %in% aTIS_transcripts) ~ "all_transcripts"))  -> aTIS_single_nt
 
-print(paste("aTIS single_nt n = ", n_distinct(aTIS_single_nt$transcript[aTIS_single_nt$uORF == "aTIS"])))
-print(paste("aTIS all transcripts single_nt n = ", n_distinct(aTIS_single_nt$transcript[aTIS_single_nt$uORF == "all_transcripts"])))
+print(paste("aTIS single_nt n = ", n_distinct(aTIS_single_nt$transcript[aTIS_single_nt$uTIS == "aTIS"])))
+print(paste("aTIS all transcripts single_nt n = ", n_distinct(aTIS_single_nt$transcript[aTIS_single_nt$uTIS == "all_transcripts"])))
 
 #plot binned reactivity for aTIS transcripts----
-#calculate P values
-binned_p_list <- list()
-
-for (region in c("fpUTR", "CDS", "tpUTR")) {
-  df <- aTIS_binned[aTIS_binned$region == region,]
-  for (n in 1:max(df$bin)) {
-    bin_n <- df[df$bin == n,]
-    
-    t <- t.test(data = bin_n, net_change ~ uORF, paired = F, conf.int = T)
-    p <- t$p.value
-    upper <- t$conf.int[[1]]
-    lower <- t$conf.int[[2]]
-    
-    binned_p_list[[paste(region, n, sep = "_")]] <- data.frame(region = region, bin = n, p = p, upper = upper, lower =lower)
-  }
-}
-binned_p_data <- do.call("rbind", binned_p_list)
 
 #summarise data
 aTIS_binned %>%
-  group_by(region, bin, uORF) %>%
+  group_by(region, bin, uTIS) %>%
   summarise(average_delta = mean(net_change, na.rm = T),
             average_control = mean(control, na.rm = T),
             average_hippuristanol = mean(hippuristanol, na.rm = T)) %>%
-  inner_join(binned_p_data, by = c("region", "bin")) %>%
   ungroup() -> summarised_aTIS_binned
 
 #calculate axis limits
@@ -710,13 +778,12 @@ upper_delta_ylim <- max(c(summarised_aTIS_binned$average_delta))
 
 #plot
 binned_delta_plot_list <- list()
-
 for (region in c("fpUTR", "CDS", "tpUTR")) {
   df <- summarised_aTIS_binned[summarised_aTIS_binned$region == region,]
   xlim <- max(df$bin)
   
   if(region == "fpUTR") {
-    binned_delta_plot_list[[region]] <- ggplot(data = df, aes(x = bin, y = average_delta, fill = factor(uORF, levels = c("all_transcripts", "aTIS"),
+    binned_delta_plot_list[[region]] <- ggplot(data = df, aes(x = bin, y = average_delta, fill = factor(uTIS, levels = c("all_transcripts", "aTIS"),
                                                                                                         ordered = T)))+
       geom_bar(position = position_dodge(), stat='identity')+
       scale_fill_manual(values=c("#5D1882", "#A6A61C"))+
@@ -725,7 +792,7 @@ for (region in c("fpUTR", "CDS", "tpUTR")) {
       coord_trans(limx = c(0.5,xlim + 0.5))
     
   }else{
-    binned_delta_plot_list[[region]] <- ggplot(data = df, aes(x = bin, y = average_delta, fill = factor(uORF, levels = c("all_transcripts", "aTIS"),
+    binned_delta_plot_list[[region]] <- ggplot(data = df, aes(x = bin, y = average_delta, fill = factor(uTIS, levels = c("all_transcripts", "aTIS"),
                                                                                                         ordered = T)))+
       geom_bar(position = position_dodge(), stat='identity')+
       scale_fill_manual(values=c("#5D1882", "#A6A61C"))+
@@ -747,30 +814,13 @@ grid.arrange(binned_delta_plot_list$fpUTR, binned_delta_plot_list$CDS, binned_de
 dev.off()
 
 #plot single nt reactivity for aTIS transcripts----
-#calculate p values and 95% confidence intervals
-single_nt_p_list <- list()
-for (region in c("fpUTR", "CDS", "tpUTR")) {
-  for (n in c(seq(-59,-2, by = 3), seq(2,59, by = 3))) {
-    window_n <- aTIS_single_nt[aTIS_single_nt$region == region & aTIS_single_nt$window == n,]
-    
-    t <- t.test(data = window_n, delta ~ uORF, paired = F, conf.int = T)
-    p <- t$p.value
-    upper <- t$conf.int[[1]]
-    lower <- t$conf.int[[2]]
-    
-    single_nt_p_list[[paste(region, n, sep = "_")]] <- data.frame(region = region, window = n, p = p, upper = upper, lower =lower)
-  }
-}
-
-single_nt_p_data <- do.call("rbind", single_nt_p_list)
 
 #summarise data
 aTIS_single_nt %>%
-  group_by(region, window, uORF) %>%
+  group_by(region, window, uTIS) %>%
   summarise(average_delta = mean(delta, na.rm = T),
             average_control = mean(control, na.rm = T),
             average_hippuristanol = mean(hippuristanol, na.rm = T)) %>%
-  inner_join(single_nt_p_data, by = c("region", "window")) %>%
   ungroup() %>%
   mutate(location = case_when(window > 0 ~ "Start",
                               window < 0 ~ "End"))-> summarised_aTIS_single_nt
@@ -779,8 +829,8 @@ aTIS_single_nt %>%
 lower_delta_ylim <- min(c(summarised_aTIS_single_nt$average_delta))
 upper_delta_ylim <- max(c(summarised_aTIS_single_nt$average_delta))
 
+#plot
 single_nt_delta_plot_list <- list()
-
 for (region in c("fpUTR", "CDS", "tpUTR")) {
   for (location in c("Start", "End")) {
     df <- summarised_aTIS_single_nt[summarised_aTIS_single_nt$region == region & summarised_aTIS_single_nt$location == location,]
@@ -789,7 +839,7 @@ for (region in c("fpUTR", "CDS", "tpUTR")) {
     upper_xlim <- max(df$window) + 1
     
     if (region == "fpUTR" & location == "Start") {
-      single_nt_delta_plot_list[[paste(region, location, sep = "_")]] <- ggplot(data = df, aes(x = window, y = average_delta, fill = factor(uORF, levels = c("all_transcripts", "aTIS"),
+      single_nt_delta_plot_list[[paste(region, location, sep = "_")]] <- ggplot(data = df, aes(x = window, y = average_delta, fill = factor(uTIS, levels = c("all_transcripts", "aTIS"),
                                                                                                                                             ordered = T)))+
         geom_bar(position = position_dodge(), stat='identity')+
         scale_fill_manual(values=c("#5D1882", "#A6A61C"))+
@@ -798,7 +848,7 @@ for (region in c("fpUTR", "CDS", "tpUTR")) {
         coord_trans(limx = c(lower_xlim - 0.5, upper_xlim + 0.5))
       
     }else{
-      single_nt_delta_plot_list[[paste(region, location, sep = "_")]] <- ggplot(data = df, aes(x = window, y = average_delta, fill = factor(uORF, levels = c("all_transcripts", "aTIS"),
+      single_nt_delta_plot_list[[paste(region, location, sep = "_")]] <- ggplot(data = df, aes(x = window, y = average_delta, fill = factor(uTIS, levels = c("all_transcripts", "aTIS"),
                                                                                                                                             ordered = T)))+
         geom_bar(position = position_dodge(), stat='identity')+
         scale_fill_manual(values=c("#5D1882", "#A6A61C"))+
@@ -830,7 +880,7 @@ grid.arrange(grobs = c(lapply(fpUTR_Start, "+", start_margin), lapply(fpUTR_End,
 dev.off()
 
 #export legend
-legend_plot <- ggplot(data = summarised_aTIS_single_nt, aes(x = window, y = average_delta, fill = factor(uORF, levels = c("all_transcripts", "aTIS"),
+legend_plot <- ggplot(data = summarised_aTIS_single_nt, aes(x = window, y = average_delta, fill = factor(uTIS, levels = c("all_transcripts", "aTIS"),
                                                                                       ordered = T, labels = c("all\ntranscripts", "aTIS"))))+
   geom_bar(position = position_dodge(), stat='identity')+
   scale_fill_manual(values=c("#5D1882", "#A6A61C"))+
@@ -842,18 +892,21 @@ grid.arrange(aTIS_legend)
 dev.off()
 
 #fourAdep----
+#filter translation data to include only 4A-dep and 4A-indep transcripts in filtered_transcripts
 translation_data %>%
   inner_join(transcript_to_geneID, by = "gene") %>%
-  filter(transcript %in% filtered_transcripts) %>%
-  filter(translation == "4A-dep" | translation == "4A-indep") -> translation_df
+  filter(transcript %in% filtered_transcripts,
+         translation == "4A-dep" | translation == "4A-indep") -> translation_df
 
-n_distinct(translation_df$transcript[translation_df$translation == "4A-dep"]) -> n_fourAdep_transcripts
+#calculate the number of 4A-dep transcripts and then select the same number of 4A-indep transcripts based on the lowest posterior probability
+n_fourAdep_transcripts <- n_distinct(translation_df$transcript[translation_df$translation == "4A-dep"])
 
 translation_df %>%
   group_by(translation) %>%
   top_n(wt = -posterior_probability, n = n_fourAdep_transcripts) %>%
   ungroup() -> filtered_translation_data
 
+#merge with reactivity data
 filtered_translation_data %>%
   inner_join(binned_data, by = "transcript") -> fourAdep_binned
 
@@ -866,25 +919,7 @@ filtered_translation_data %>%
 print(paste("4A-dep single_nt =", n_distinct(fourAdep_single_nt$transcript[fourAdep_single_nt$translation == "4A-dep"])))
 print(paste("4A-indep single_nt =", n_distinct(fourAdep_single_nt$transcript[fourAdep_single_nt$translation == "4A-indep"])))
 
-
 #plot binned reactivity for fourAdep----
-#calculate P values
-binned_p_list <- list()
-
-for (region in c("fpUTR", "CDS", "tpUTR")) {
-  df <- fourAdep_binned[fourAdep_binned$region == region,]
-  for (n in 1:max(df$bin)) {
-    bin_n <- df[df$bin == n,]
-    
-    t <- wilcox.test(data = bin_n, net_change ~ translation, paired = F, conf.int = T)
-    p <- t$p.value
-    upper <- t$conf.int[[1]]
-    lower <- t$conf.int[[2]]
-    
-    binned_p_list[[paste(region, n, sep = "_")]] <- data.frame(region = region, bin = n, p = p, upper = upper, lower =lower)
-  }
-}
-binned_p_data <- do.call("rbind", binned_p_list)
 
 #summarise data
 fourAdep_binned %>%
@@ -892,7 +927,6 @@ fourAdep_binned %>%
   summarise(average_delta = mean(net_change, na.rm = T),
             average_control = mean(control, na.rm = T),
             average_hippuristanol = mean(hippuristanol, na.rm = T)) %>%
-  inner_join(binned_p_data, by = c("region", "bin")) %>%
   ungroup() -> summarised_fourAdep_binned
 
 #calculate axis limits
@@ -901,7 +935,6 @@ upper_delta_ylim <- max(c(summarised_fourAdep_binned$average_delta))
 
 #plot
 binned_delta_plot_list <- list()
-
 for (region in c("fpUTR", "CDS", "tpUTR")) {
   df <- summarised_fourAdep_binned[summarised_fourAdep_binned$region == region,]
   xlim <- max(df$bin)
@@ -936,22 +969,6 @@ grid.arrange(binned_delta_plot_list$fpUTR, binned_delta_plot_list$CDS, binned_de
 dev.off()
 
 #plot single nt reactivity for fourAdep transcripts----
-#calculate p values and 95% confidence intervals
-single_nt_p_list <- list()
-for (region in c("fpUTR", "CDS", "tpUTR")) {
-  for (n in c(seq(-59,-2, by = 3), seq(2,59, by = 3))) {
-    window_n <- fourAdep_single_nt[fourAdep_single_nt$region == region & fourAdep_single_nt$window == n,]
-    
-    t <- t.test(data = window_n, delta ~ translation, paired = F, conf.int = T)
-    p <- t$p.value
-    upper <- t$conf.int[[1]]
-    lower <- t$conf.int[[2]]
-    
-    single_nt_p_list[[paste(region, n, sep = "_")]] <- data.frame(region = region, window = n, p = p, upper = upper, lower =lower)
-  }
-}
-
-single_nt_p_data <- do.call("rbind", single_nt_p_list)
 
 #summarise data
 fourAdep_single_nt %>%
@@ -959,7 +976,6 @@ fourAdep_single_nt %>%
   summarise(average_delta = mean(delta, na.rm = T),
             average_control = mean(control, na.rm = T),
             average_hippuristanol = mean(hippuristanol, na.rm = T)) %>%
-  inner_join(single_nt_p_data, by = c("region", "window")) %>%
   ungroup() %>%
   mutate(location = case_when(window > 0 ~ "Start",
                               window < 0 ~ "End"))-> summarised_fourAdep_single_nt
@@ -968,8 +984,8 @@ fourAdep_single_nt %>%
 lower_delta_ylim <- min(c(summarised_fourAdep_single_nt$average_delta))
 upper_delta_ylim <- max(c(summarised_fourAdep_single_nt$average_delta))
 
+#plot
 single_nt_delta_plot_list <- list()
-
 for (region in c("fpUTR", "CDS", "tpUTR")) {
   for (location in c("Start", "End")) {
     df <- summarised_fourAdep_single_nt[summarised_fourAdep_single_nt$region == region & summarised_fourAdep_single_nt$location == location,]
@@ -1025,4 +1041,214 @@ legend_plot <- ggplot(data = summarised_fourAdep_single_nt, aes(x = window, y = 
 delta_legend <- myLegend(legend_plot)
 pdf(file = 'forAdep_delta_legend.pdf', height = 1, width = 1)
 grid.arrange(delta_legend)
+dev.off()
+
+#cytosines only----
+#bin data as above but for cytosines only
+
+#fpUTR
+reactivity_data[reactivity_data$region == "fpUTR" & reactivity_data$Nucleotide == "C",] %>%
+  spread(key = condition, value = Reactivity) %>%
+  mutate(delta = hippuristanol - control) %>%
+  group_by(transcript) %>%
+  mutate(length = rep(max(Position))) %>% 
+  ungroup() %>%
+  mutate(normalised_position = Position / length,
+         bin = calculate_bins(normalised_position, fpUTR_bins)) %>%
+  group_by(transcript, bin) %>%
+  summarise(control = mean(control, na.rm = T),
+            hippuristanol = mean(hippuristanol, na.rm = T),
+            net_change = mean(delta, na.rm = T)) %>%
+  ungroup() %>%
+  mutate(region = rep("fpUTR")) -> fpUTR_binned_cytosines
+
+#CDS
+reactivity_data[reactivity_data$region == "CDS" & reactivity_data$Nucleotide == "C",] %>%
+  spread(key = condition, value = Reactivity) %>%
+  mutate(delta = hippuristanol - control) %>%
+  group_by(transcript) %>%
+  mutate(length = rep(max(Position))) %>%
+  ungroup() %>%
+  mutate(normalised_position = Position / length,
+         bin = calculate_bins(normalised_position, CDS_bins)) %>%
+  group_by(transcript, bin) %>%
+  summarise(control = mean(control, na.rm = T),
+            hippuristanol = mean(hippuristanol, na.rm = T),
+            net_change = mean(delta, na.rm = T)) %>%
+  ungroup() %>%
+  mutate(region = rep("CDS")) -> CDS_binned_cytosines
+
+#tpUTR
+reactivity_data[reactivity_data$region == "tpUTR" & reactivity_data$Nucleotide == "C",] %>%
+  spread(key = condition, value = Reactivity) %>%
+  mutate(delta = hippuristanol - control) %>%
+  group_by(transcript) %>%
+  mutate(length = rep(max(Position))) %>%
+  filter(Position <= (length - tp_trim)) %>%
+  mutate(trimmed_length = rep(max(Position))) %>%
+  ungroup() %>%
+  mutate(normalised_position = Position / trimmed_length,
+         bin = calculate_bins(normalised_position, tpUTR_bins)) %>%
+  group_by(transcript, bin) %>%
+  summarise(control = mean(control, na.rm = T),
+            hippuristanol = mean(hippuristanol, na.rm = T),
+            net_change = mean(delta, na.rm = T)) %>%
+  ungroup() %>%
+  mutate(region = rep("tpUTR")) -> tpUTR_binned_cytosines
+
+binned_cytosines <- bind_rows(fpUTR_binned_cytosines, CDS_binned_cytosines, tpUTR_binned_cytosines)
+
+#summarise data
+binned_cytosines %>%
+  group_by(region, bin) %>%
+  summarise(average_delta = mean(net_change, na.rm = T),
+            average_control = mean(control, na.rm = T),
+            average_hippuristanol = mean(hippuristanol, na.rm = T)) %>%
+  ungroup() -> summarised_binned_cytosines
+
+#calculate axis limits
+raw_ylim <- max(c(summarised_binned_cytosines$average_control,summarised_binned_cytosines$average_hippuristanol), na.rm = T)
+
+#plot
+binned_raw_plot_list <- list()
+for (region in c("fpUTR", "CDS", "tpUTR")) {
+  df <- summarised_binned_cytosines[summarised_binned_cytosines$region == region,]
+  xlim <- max(df$bin)
+  
+  if(region == "fpUTR") {
+    df %>%
+      select(bin, average_control, average_hippuristanol) %>%
+      gather(key = condition, value = Reactivity, average_control, average_hippuristanol) %>%
+      ggplot(aes(x = bin, y = Reactivity, colour = factor(condition)))+
+      geom_line(size = 1)+
+      y_only_theme+
+      scale_y_continuous(limits = c(0,raw_ylim))+
+      coord_trans(limx = c(0.5,xlim + 0.5)) -> binned_raw_plot_list[[region]]
+    
+  }else{
+    df %>%
+      select(bin, average_control, average_hippuristanol) %>%
+      gather(key = condition, value = Reactivity, average_control, average_hippuristanol) %>%
+      ggplot(aes(x = bin, y = Reactivity, colour = factor(condition)))+
+      geom_line(size = 1)+
+      no_labels_theme+
+      scale_y_continuous(limits = c(0,raw_ylim))+
+      coord_trans(limx = c(0.5,xlim + 0.5)) -> binned_raw_plot_list[[region]]
+  }
+}
+
+#export figures
+awidth <- max(summarised_binned_cytosines[summarised_binned_cytosines$region == "fpUTR",]$bin)
+bwidth <- max(summarised_binned_cytosines[summarised_binned_cytosines$region == "CDS",]$bin)
+cwidth <- max(summarised_binned_cytosines[summarised_binned_cytosines$region == "tpUTR",]$bin)
+plot_widths <- c(awidth, bwidth, cwidth)
+
+pdf(file = 'all_transcripts_binned_C_only.pdf', width = 20, height = 4)
+grid.arrange(binned_raw_plot_list$fpUTR, binned_raw_plot_list$CDS, binned_raw_plot_list$tpUTR,
+             nrow = 1, widths = plot_widths)
+dev.off()
+
+#adenines only----
+#bin data as above but for adenines only
+
+#fpUTR
+reactivity_data[reactivity_data$region == "fpUTR" & reactivity_data$Nucleotide == "A",] %>%
+  spread(key = condition, value = Reactivity) %>%
+  mutate(delta = hippuristanol - control) %>%
+  group_by(transcript) %>%
+  mutate(length = rep(max(Position))) %>%
+  ungroup() %>%
+  mutate(normalised_position = Position / length,
+         bin = calculate_bins(normalised_position, fpUTR_bins)) %>%
+  group_by(transcript, bin) %>%
+  summarise(control = mean(control, na.rm = T),
+            hippuristanol = mean(hippuristanol, na.rm = T),
+            net_change = mean(delta, na.rm = T)) %>%
+  ungroup() %>%
+  mutate(region = rep("fpUTR")) -> fpUTR_binned_adenines
+
+#CDS
+reactivity_data[reactivity_data$region == "CDS" & reactivity_data$Nucleotide == "A",] %>%
+  spread(key = condition, value = Reactivity) %>%
+  mutate(delta = hippuristanol - control) %>%
+  group_by(transcript) %>%
+  mutate(length = rep(max(Position))) %>%
+  ungroup() %>%
+  mutate(normalised_position = Position / length,
+         bin = calculate_bins(normalised_position, CDS_bins)) %>%
+  group_by(transcript, bin) %>%
+  summarise(control = mean(control, na.rm = T),
+            hippuristanol = mean(hippuristanol, na.rm = T),
+            net_change = mean(delta, na.rm = T)) %>%
+  ungroup() %>%
+  mutate(region = rep("CDS")) -> CDS_binned_adenines
+
+#tpUTR
+reactivity_data[reactivity_data$region == "tpUTR" & reactivity_data$Nucleotide == "A",] %>%
+  spread(key = condition, value = Reactivity) %>%
+  mutate(delta = hippuristanol - control) %>%
+  group_by(transcript) %>%
+  mutate(length = rep(max(Position))) %>%
+  filter(Position <= (length - tp_trim)) %>%
+  mutate(trimmed_length = rep(max(Position))) %>%
+  ungroup() %>%
+  mutate(normalised_position = Position / trimmed_length,
+         bin = calculate_bins(normalised_position, tpUTR_bins)) %>%
+  group_by(transcript, bin) %>%
+  summarise(control = mean(control, na.rm = T),
+            hippuristanol = mean(hippuristanol, na.rm = T),
+            net_change = mean(delta, na.rm = T)) %>%
+  ungroup() %>%
+  mutate(region = rep("tpUTR")) -> tpUTR_binned_adenines
+
+binned_adenines <- bind_rows(fpUTR_binned_adenines, CDS_binned_adenines, tpUTR_binned_adenines)
+
+#summarise data
+binned_adenines %>%
+  group_by(region, bin) %>%
+  summarise(average_delta = mean(net_change, na.rm = T),
+            average_control = mean(control, na.rm = T),
+            average_hippuristanol = mean(hippuristanol, na.rm = T)) %>%
+  ungroup() -> summarised_binned_adenines
+
+#calculate axis limits
+raw_ylim <- max(c(summarised_binned_adenines$average_control,summarised_binned_adenines$average_hippuristanol), na.rm = T)
+
+#plot
+binned_raw_plot_list <- list()
+for (region in c("fpUTR", "CDS", "tpUTR")) {
+  df <- summarised_binned_adenines[summarised_binned_adenines$region == region,]
+  xlim <- max(df$bin)
+  
+  if(region == "fpUTR") {
+    df %>%
+      select(bin, average_control, average_hippuristanol) %>%
+      gather(key = condition, value = Reactivity, average_control, average_hippuristanol) %>%
+      ggplot(aes(x = bin, y = Reactivity, colour = factor(condition)))+
+      geom_line(size = 1)+
+      y_only_theme+
+      scale_y_continuous(limits = c(0,raw_ylim))+
+      coord_trans(limx = c(0.5,xlim + 0.5)) -> binned_raw_plot_list[[region]]
+    
+  }else{
+    df %>%
+      select(bin, average_control, average_hippuristanol) %>%
+      gather(key = condition, value = Reactivity, average_control, average_hippuristanol) %>%
+      ggplot(aes(x = bin, y = Reactivity, colour = factor(condition)))+
+      geom_line(size = 1)+
+      no_labels_theme+
+      scale_y_continuous(limits = c(0,raw_ylim))+
+      coord_trans(limx = c(0.5,xlim + 0.5)) -> binned_raw_plot_list[[region]]
+  }
+}
+
+#export figures
+awidth <- max(summarised_binned_adenines[summarised_binned_adenines$region == "fpUTR",]$bin)
+bwidth <- max(summarised_binned_adenines[summarised_binned_adenines$region == "CDS",]$bin)
+cwidth <- max(summarised_binned_adenines[summarised_binned_adenines$region == "tpUTR",]$bin)
+plot_widths <- c(awidth, bwidth, cwidth)
+
+pdf(file = 'all_transcripts_binned_A_only.pdf', width = 20, height = 4)
+grid.arrange(binned_raw_plot_list$fpUTR, binned_raw_plot_list$CDS, binned_raw_plot_list$tpUTR,
+             nrow = 1, widths = plot_widths)
 dev.off()
