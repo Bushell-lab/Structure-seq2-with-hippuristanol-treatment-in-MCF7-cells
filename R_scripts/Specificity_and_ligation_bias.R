@@ -1,22 +1,32 @@
+###This script was written by Joseph A.Waldron and produces panels S1F-G in Waldron et al. (2019) Genome Biology
+###Input data can be downloaded from the Gene Expression Omnibus (GEO) database accessions GSE134865 which can be found at 
+###https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134865
+
 ###Imports
 library(tidyverse)
 
-#set home and working directory----
-setwd('N:\\JWALDRON/Structure_seq/Paper/Figures/R/Structure_seq_QC/panels')
-home <- 'N:\\JWALDRON/Structure_seq'
+#set home directory----
+home <- '' #this needs to be set to the directory containing the data
+
+#write theme----
+my_theme <- theme_bw()+
+  theme(axis.text = element_text(size=18, face="bold"),
+        axis.ticks = element_blank(),
+        axis.title = element_blank(),
+        legend.title = element_blank(),
+        legend.text = element_text(size=18),
+        panel.border = element_blank(),
+        panel.grid = element_blank())
 
 #specificity----
 #read data
-specificity <- read_csv(file = file.path(home, "MCF7_2015/raw_data/specificity/specificity.csv"), col_names = T)
+specificity <- read_csv(file = file.path(home, "specificity.csv"), col_names = T)
 
 #reformat data
 specificity %>%
   select(base, control_minus_DMS_specificity, control_plus_DMS_specificity, hippuristanol_minus_DMS_specificity, hippuristanol_plus_DMS_specificity) %>%
   gather(key = condition, value = percentage, control_minus_DMS_specificity, control_plus_DMS_specificity, hippuristanol_minus_DMS_specificity, hippuristanol_plus_DMS_specificity) %>%
-  mutate(base = factor(base,
-                       levels = c("T", "G", "C", "A"), 
-                       labels = c("U", "G", "C", "A"),
-                       ordered = T),
+  mutate(base = factor(base, levels = c("T", "G", "C", "A"), labels = c("U", "G", "C", "A"), ordered = T),
          condition = factor(condition, 
                             levels = c("hippuristanol_plus_DMS_specificity", "control_plus_DMS_specificity", "hippuristanol_minus_DMS_specificity", "control_minus_DMS_specificity"), 
                             labels = c("Hipp / DMS (+)", "Ctrl / DMS (+)", "Hipp / DMS (-)", "Ctrl / DMS (-)"),
@@ -25,14 +35,7 @@ specificity %>%
 #plot   
 specificity_plot <- ggplot(data = specificity, aes(y = percentage, x = condition, fill = base))+
   geom_bar(stat="identity")+
-  theme_bw()+
-  theme(axis.text = element_text(size=18, face="bold"),
-        axis.ticks = element_blank(),
-        axis.title = element_blank(),
-        legend.title = element_blank(),
-        legend.text = element_text(size=18),
-        panel.border = element_blank(),
-        panel.grid = element_blank())+
+  my_theme+
   scale_y_continuous(labels=scales::percent)+
   scale_fill_manual(values=c(A="#086FA1", C="#FF3500", G="#00B64F", U="#FF8900"))+
   coord_flip()
@@ -96,14 +99,7 @@ transcriptome_counts %>%
 #plot
 ligation_plot <- ggplot(data = merged_data, aes(y = percentage, x = condition, fill = nt))+
   geom_bar(stat="identity")+
-  theme_bw()+
-  theme(axis.text = element_text(size=18, face="bold"),
-        axis.ticks = element_blank(),
-        axis.title = element_blank(),
-        legend.title = element_blank(),
-        legend.text = element_text(size=18),
-        panel.border = element_blank(),
-        panel.grid = element_blank())+
+  my_theme+
   scale_y_continuous(labels=scales::percent)+
   scale_fill_manual(values=c(A="#086FA1", C="#FF3500", G="#00B64F", U="#FF8900"))+
   coord_flip()
