@@ -1,20 +1,57 @@
+###This script was written by Joseph A.Waldron and produces panels 3B-E in Waldron et al. (2019) Genome Biology
+###Input data can be downloaded from the Gene Expression Omnibus (GEO) database accessions GSE134865 and GSE134888 which can be found at 
+###https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134865 and https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134888
+
 ###Imports
 library(grid)
 library(gridExtra)
 library(tidyverse)
 
-#import functions----
-source("N:\\JWALDRON/R_scripts/functions.R")
-#source("\\\\data.beatson.gla.ac.uk/data/JWALDRON/R_scripts/functions.R")
+#set home directory----
+home <- '' #this needs to be set to the directory containing the data
 
-#import variables----
-source("N:\\JWALDRON/R_scripts/structure_seq_variables.R")
-#source("\\\\data.beatson.gla.ac.uk/data/JWALDRON/R_scripts/structure_seq_variables.R")
+#set variables----
+#posterior probability thresholds
+positive_change <- 0.25
+no_change <- 0.02
 
-#set home and working directory----
-setwd('N:\\JWALDRON/Structure_seq/Paper/Figures/R/Polysomes/panels')
-#setwd('\\\\data.beatson.gla.ac.uk/data/JWALDRON/Structure_seq/Paper/Figures/R/Polysomes/panels')
-#home <- '\\\\data.beatson.gla.ac.uk/data/JWALDRON/Structure_seq/MCF7_2015'
+#write functions----
+#makes a label from the output of either t.test or wilcox.test to include the p value and 95% confidence limits
+myP <- function(x) {
+  p <- as.numeric(x$p.value)
+  if (p < 2.2e-16) {
+    p_label <- "P < 2.2e-16"
+  } else {
+    if (p < 0.001) {
+      rounded_p <- formatC(p, format = "e", digits = 2)
+    } else {
+      rounded_p <- round(p, digits = 3)
+    }
+    p_label <- paste("P =", rounded_p)
+  }
+  lower <- round(x$conf.int[1], digits = 3)
+  upper <- round(x$conf.int[2], digits = 3)
+  if (lower == 0 | upper == 0) {
+    lower <- round(x$conf.int[1], digits = 4)
+    upper <- round(x$conf.int[2], digits = 4)
+    if (lower == 0 | upper == 0) {
+      lower <- round(x$conf.int[1], digits = 5)
+      upper <- round(x$conf.int[2], digits = 5)
+      if (lower == 0 | upper == 0) {
+        lower <- round(x$conf.int[1], digits = 6)
+        upper <- round(x$conf.int[2], digits = 6)
+      }
+    }
+  }
+  return(paste0(p_label, "\n95% conf int:\n", lower, "   ", upper))
+}
+
+#exports just the legend of a plot
+myLegend <- function(a.gplot){
+  tmp <- ggplot_gtable(ggplot_build(a.gplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)}
 
 #make theme----
 myTheme <- theme_bw()+
@@ -24,369 +61,146 @@ myTheme <- theme_bw()+
         plot.title = element_text(hjust = 1, vjust = 0, size=14, face="bold"))
 
 #load data----
-#common data
-source("N:\\JWALDRON/R_scripts/Structure_seq_common_data.R")
-#source("\\\\data.beatson.gla.ac.uk/data/JWALDRON/R_scripts/Structure_seq_common_data.R")
+#totals data
+totals_data <- read_tsv(file = file.path(home, 'penn-DE.mmdiffMCF7'), col_names = T, skip = 1) #download from GSE134888
+totals_data %>%
+  mutate(abundance = case_when(posterior_probability > positive_change ~ alpha1,
+                               posterior_probability < positive_change ~ alpha0)) %>%
+  rename(transcript = feature_id) %>%
+  select(transcript, abundance) -> abundance_data
+rm(totals_data)
 
-FASTA_compositions %>%
-  mutate(GC_content = GC_content *100,
-         GA_content = GA_content *100,
-         G_content = G_content *100,
-         A_content = A_content *100,
-         C_content = C_content *100,
-         T_content = T_content *100) %>%
+#translation data
+translation_data <- read_tsv(file = file.path(home, 'penn-DOD-gene.mmdiffMCF7'), col_names = T, skip = 1) #download from GSE134888
+translation_data %>%
+  rename(gene = feature_id) %>%
+  mutate(DOD = eta1_1 - eta1_2,
+         translation = factor(case_when(posterior_probability > positive_change & DOD < 0 ~ "4A-dep",
+                                        posterior_probability < no_change ~ "4A-indep"), levels = c("4A-dep", "4A-indep"), ordered = T)) -> translation_data
+
+#transcript to gene ID
+transcript_to_geneID <- read_tsv(file = file.path(home, 'MCF7_2015_transcript_to_gene_map.txt'), col_names = T) #download from GSE134865
+
+#5'UTR FASTA composition data
+fpUTR_fasta_composition <- read_csv(file = file.path(home, 'MCF7_2015_fpUTRs_composition.csv'), col_names = T) #download data from GSE134865
+
+#G4 predictions
+G4_data <- read_tsv(file = file.path(home, "fpUTR_G4_screener.tsv"), col_names = T) #download data from GSE134865
+
+#sort data----
+#the following pipe mutates G and C contenet into percentages by multiplying by 100, merges data, filters it to include only 4A-dep and 4A-indep transcripts
+#and then selects the most abundant transcript per gene and then the maximum G4NN score per transcript
+fpUTR_fasta_composition %>%
+  mutate(G_content = G_content * 100,
+         C_content = C_content * 100) %>%
+  inner_join(G4_data, by = c("transcript" = "description")) %>%
   inner_join(transcript_to_geneID, by = "transcript") %>%
   inner_join(translation_data, by = "gene") %>%
-  filter(translation == "4A-dep" | translation == "4A-indep") %>%
   inner_join(abundance_data, by = "transcript") %>%
+  filter(translation == "4A-dep" | translation == "4A-indep") %>%
   group_by(gene) %>%
   top_n(n = 1, wt = abundance) %>%
+  top_n(wt = G4NN, n = 1) %>%
   ungroup() -> merged_data
 
+#calculate the number of 4A-dep transcripts and then select the same numebr of 4A-indep transcripts based on the lowest posterior probability
 fourAdep_transcript_n <- n_distinct(merged_data$transcript[merged_data$translation == "4A-dep"])
 
 merged_data %>%
-  group_by(translation, region) %>%
+  group_by(translation) %>%
   top_n(wt = -posterior_probability, n = fourAdep_transcript_n) %>%
   ungroup() -> merged_data 
 
-summary(merged_data$translation[merged_data$region=="fpUTR"])
-summary(merged_data$translation[merged_data$region=="CDS"])
-summary(merged_data$translation[merged_data$region=="tpUTR"])
+summary(merged_data$translation)
 
 #plot data----
-for (region in c("fpUTR", "CDS", "tpUTR")) {
-  df <- merged_data[merged_data$region == region,]
-  
-  #plot length
-  t <- wilcox.test(data = df, length ~ translation,
-                   paired = F,
-                   alternative = "two.sided",
-                   var.equal = F,
-                   conf.int = T)
-  p_label <- myP(t)
-  
-  fourAdep_mean <- mean(df$length[df$translation == "4A-dep"])
-  fourAindep_mean <- mean(df$length[df$translation == "4A-indep"])
-  
-  density_plot <- ggplot(data = df, aes(x = length, colour = translation, fill = translation))+
-    geom_density(alpha = 0.5)+
-    scale_fill_manual(values=c("#74add1", "#fdae61"))+
-    scale_colour_manual(values=c("#74add1", "#fdae61"))+
-    xlab('length')+
-    scale_x_log10(breaks=c(10,100,1000,10000),limits=c(10, 10000))+
-    geom_vline(xintercept = fourAdep_mean, colour = "#74add1", linetype="dashed", size = 2)+
-    geom_vline(xintercept = fourAindep_mean, colour = "#fdae61", linetype="dashed", size = 2)+
-    myTheme+
-    ggtitle(p_label)
-  pdf(file = paste0(region, "_length_density.pdf"), width = 4, height = 4)
-  print(density_plot)
-  dev.off()
-  
-  #plot GC_content
-  t <- wilcox.test(data = df, GC_content ~ translation,
-                   paired = F,
-                   alternative = "two.sided",
-                   var.equal = F,
-                   conf.int = T)
-  p_label <- myP(t)
-  
-  fourAdep_mean <- mean(df$GC_content[df$translation == "4A-dep"])
-  fourAindep_mean <- mean(df$GC_content[df$translation == "4A-indep"])
-  
-  density_plot <- ggplot(data = df, aes(x = GC_content, colour = translation, fill = translation))+
-    geom_density(alpha = 0.5)+
-    scale_fill_manual(values=c("#74add1", "#fdae61"))+
-    scale_colour_manual(values=c("#74add1", "#fdae61"))+
-    xlab('GC content')+
-    xlim(c(25,100))+
-    geom_vline(xintercept = fourAdep_mean, colour = "#74add1", linetype="dashed", size = 2)+
-    geom_vline(xintercept = fourAindep_mean, colour = "#fdae61", linetype="dashed", size = 2)+
-    myTheme+
-    ggtitle(p_label)
-  pdf(file = paste0(region, "_GC_content_density.pdf"), width = 4, height = 4)
-  print(density_plot)
-  dev.off()
-  
-  #plot GA_content
-  t <- wilcox.test(data = df, GA_content ~ translation,
-                   paired = F,
-                   alternative = "two.sided",
-                   var.equal = F,
-                   conf.int = T)
-  p_label <- myP(t)
-  
-  fourAdep_mean <- mean(df$GA_content[df$translation == "4A-dep"])
-  fourAindep_mean <- mean(df$GA_content[df$translation == "4A-indep"])
-  
-  density_plot <- ggplot(data = df, aes(x = GA_content, colour = translation, fill = translation))+
-    geom_density(alpha = 0.5)+
-    scale_fill_manual(values=c("#74add1", "#fdae61"))+
-    scale_colour_manual(values=c("#74add1", "#fdae61"))+
-    xlab('GA content')+
-    xlim(c(25,100))+
-    geom_vline(xintercept = fourAdep_mean, colour = "#74add1", linetype="dashed", size = 2)+
-    geom_vline(xintercept = fourAindep_mean, colour = "#fdae61", linetype="dashed", size = 2)+
-    myTheme+
-    ggtitle(p_label)
-  pdf(file = paste0(region, "_GA_content_density.pdf"), width = 4, height = 4)
-  print(density_plot)
-  dev.off()
-  
-  #plot G_content
-  t <- wilcox.test(data = df, G_content ~ translation,
-                   paired = F,
-                   alternative = "two.sided",
-                   var.equal = F,
-                   conf.int = T)
-  p_label <- myP(t)
-  
-  fourAdep_mean <- mean(df$G_content[df$translation == "4A-dep"])
-  fourAindep_mean <- mean(df$G_content[df$translation == "4A-indep"])
-  
-  density_plot <- ggplot(data = df, aes(x = G_content, colour = translation, fill = translation))+
-    geom_density(alpha = 0.5)+
-    scale_fill_manual(values=c("#74add1", "#fdae61"))+
-    scale_colour_manual(values=c("#74add1", "#fdae61"))+
-    xlab('G content')+
-    xlim(c(0,50))+
-    geom_vline(xintercept = fourAdep_mean, colour = "#74add1", linetype="dashed", size = 2)+
-    geom_vline(xintercept = fourAindep_mean, colour = "#fdae61", linetype="dashed", size = 2)+
-    myTheme+
-    ggtitle(p_label)
-  pdf(file = paste0(region, "_G_content_density.pdf"), width = 4, height = 4)
-  print(density_plot)
-  dev.off()
-  
-  #plot C_content
-  t <- wilcox.test(data = df, C_content ~ translation,
-                   paired = F,
-                   alternative = "two.sided",
-                   var.equal = F,
-                   conf.int = T)
-  p_label <- myP(t)
-  
-  fourAdep_mean <- mean(df$C_content[df$translation == "4A-dep"])
-  fourAindep_mean <- mean(df$C_content[df$translation == "4A-indep"])
-  
-  density_plot <- ggplot(data = df, aes(x = C_content, colour = translation, fill = translation))+
-    geom_density(alpha = 0.5)+
-    scale_fill_manual(values=c("#74add1", "#fdae61"))+
-    scale_colour_manual(values=c("#74add1", "#fdae61"))+
-    xlab('C content')+
-    xlim(c(0,50))+
-    geom_vline(xintercept = fourAdep_mean, colour = "#74add1", linetype="dashed", size = 2)+
-    geom_vline(xintercept = fourAindep_mean, colour = "#fdae61", linetype="dashed", size = 2)+
-    myTheme+
-    ggtitle(p_label)
-  pdf(file = paste0(region, "_C_content_density.pdf"), width = 4, height = 4)
-  print(density_plot)
-  dev.off()
-  
-  #plot A_content
-  t <- wilcox.test(data = df, A_content ~ translation,
-                   paired = F,
-                   alternative = "two.sided",
-                   var.equal = F,
-                   conf.int = T)
-  p_label <- myP(t)
-  
-  fourAdep_mean <- mean(df$A_content[df$translation == "4A-dep"])
-  fourAindep_mean <- mean(df$A_content[df$translation == "4A-indep"])
-  
-  density_plot <- ggplot(data = df, aes(x = A_content, colour = translation, fill = translation))+
-    geom_density(alpha = 0.5)+
-    scale_fill_manual(values=c("#74add1", "#fdae61"))+
-    scale_colour_manual(values=c("#74add1", "#fdae61"))+
-    xlab('A content')+
-    xlim(c(0,50))+
-    geom_vline(xintercept = fourAdep_mean, colour = "#74add1", linetype="dashed", size = 2)+
-    geom_vline(xintercept = fourAindep_mean, colour = "#fdae61", linetype="dashed", size = 2)+
-    myTheme+
-    ggtitle(p_label)
-  pdf(file = paste0(region, "_A_content_density.pdf"), width = 4, height = 4)
-  print(density_plot)
-  dev.off()
-  
-  #plot T_content
-  t <- wilcox.test(data = df, T_content ~ translation,
-                   paired = F,
-                   alternative = "two.sided",
-                   var.equal = F,
-                   conf.int = T)
-  p_label <- myP(t)
-  
-  fourAdep_mean <- mean(df$T_content[df$translation == "4A-dep"])
-  fourAindep_mean <- mean(df$T_content[df$translation == "4A-indep"])
-  
-  density_plot <- ggplot(data = df, aes(x = T_content, colour = translation, fill = translation))+
-    geom_density(alpha = 0.5)+
-    scale_fill_manual(values=c("#74add1", "#fdae61"))+
-    scale_colour_manual(values=c("#74add1", "#fdae61"))+
-    xlab('U content')+
-    xlim(c(0,50))+
-    geom_vline(xintercept = fourAdep_mean, colour = "#74add1", linetype="dashed", size = 2)+
-    geom_vline(xintercept = fourAindep_mean, colour = "#fdae61", linetype="dashed", size = 2)+
-    myTheme+
-    ggtitle(p_label)
-  pdf(file = paste0(region, "_T_content_density.pdf"), width = 4, height = 4)
-  print(density_plot)
-  dev.off()
-}
+#length
+t <- wilcox.test(data = merged_data, length ~ translation,
+                 paired = F,
+                 alternative = "two.sided",
+                 var.equal = F,
+                 conf.int = T)
+p_label <- myP(t)
 
-#export legend----
+fourAdep_mean <- mean(merged_data$length[merged_data$translation == "4A-dep"])
+fourAindep_mean <- mean(merged_data$length[merged_data$translation == "4A-indep"])
+
+density_plot <- ggplot(data = merged_data, aes(x = length, colour = translation, fill = translation))+
+  geom_density(alpha = 0.5)+
+  scale_fill_manual(values=c("#74add1", "#fdae61"))+
+  scale_colour_manual(values=c("#74add1", "#fdae61"))+
+  xlab('length')+
+  scale_x_log10(breaks=c(10,100,1000,10000),limits=c(10, 10000))+
+  geom_vline(xintercept = fourAdep_mean, colour = "#74add1", linetype="dashed", size = 2)+
+  geom_vline(xintercept = fourAindep_mean, colour = "#fdae61", linetype="dashed", size = 2)+
+  myTheme+
+  ggtitle(p_label)
+pdf(file = paste0(region, "_length_density.pdf"), width = 4, height = 4)
+print(density_plot)
+dev.off()
+
+#C_content
+t <- wilcox.test(data = merged_data, C_content ~ translation,
+                 paired = F,
+                 alternative = "two.sided",
+                 var.equal = F,
+                 conf.int = T)
+p_label <- myP(t)
+
+fourAdep_mean <- mean(merged_data$C_content[merged_data$translation == "4A-dep"])
+fourAindep_mean <- mean(merged_data$C_content[merged_data$translation == "4A-indep"])
+
+density_plot <- ggplot(data = merged_data, aes(x = C_content, colour = translation, fill = translation))+
+  geom_density(alpha = 0.5)+
+  scale_fill_manual(values=c("#74add1", "#fdae61"))+
+  scale_colour_manual(values=c("#74add1", "#fdae61"))+
+  xlab('C content')+
+  xlim(c(0,50))+
+  geom_vline(xintercept = fourAdep_mean, colour = "#74add1", linetype="dashed", size = 2)+
+  geom_vline(xintercept = fourAindep_mean, colour = "#fdae61", linetype="dashed", size = 2)+
+  myTheme+
+  ggtitle(p_label)
+pdf(file = paste0(region, "_C_content_density.pdf"), width = 4, height = 4)
+print(density_plot)
+dev.off()
+
+#G_content
+t <- wilcox.test(data = merged_data, G_content ~ translation,
+                 paired = F,
+                 alternative = "two.sided",
+                 var.equal = F,
+                 conf.int = T)
+p_label <- myP(t)
+
+fourAdep_mean <- mean(merged_data$G_content[merged_data$translation == "4A-dep"])
+fourAindep_mean <- mean(merged_data$G_content[merged_data$translation == "4A-indep"])
+
 density_plot <- ggplot(data = merged_data, aes(x = G_content, colour = translation, fill = translation))+
-  geom_density()+
-  scale_fill_manual(values=c("#74add1", "#fdae61"))+
-  scale_colour_manual(values=c("#74add1", "#fdae61"))+
-  theme(legend.title = element_blank())
-
-density_legend <- myLegend(density_plot)
-pdf(file = 'density_legend.pdf', height = 1, width = 1)
-grid.arrange(density_legend)
-dev.off()
-
-#calculate GC3 content
-library(seqinr)
-
-CDS_FASTA <- read.fasta(file = file.path(home, 'fasta/spliced/MCF7_2015_CDSs.fasta'))
-
-fourAdepIDs <- pull(merged_data[merged_data$translation == "4A-dep" & merged_data$region == "CDS",], transcript)
-fourAindepIDs <- pull(merged_data[merged_data$translation == "4A-indep" & merged_data$region == "CDS",], transcript)
-
-CDS_fourAdep_fasta <- CDS_FASTA[names(CDS_FASTA) %in% fourAdepIDs]
-CDS_fourAindep_fasta <- CDS_FASTA[names(CDS_FASTA) %in% fourAindepIDs]
-
-#fourAdep
-fourAdep_GC1 <- lapply(CDS_fourAdep_fasta, GC1)
-fourAdep_GC2 <- lapply(CDS_fourAdep_fasta, GC2)
-fourAdep_GC3 <- lapply(CDS_fourAdep_fasta, GC3)
-
-fourAdep_GC1 %>%
-  as.data.frame() %>%
-  gather(key = transcript, value = GC1) %>%
-  mutate(translation = rep("4A-dep")) -> fourAdep_GC1
-
-fourAdep_GC2 %>%
-  as.data.frame() %>%
-  gather(key = transcript, value = GC2) %>%
-  mutate(translation = rep("4A-dep")) -> fourAdep_GC2
-
-fourAdep_GC3 %>%
-  as.data.frame() %>%
-  gather(key = transcript, value = GC3) %>%
-  mutate(translation = rep("4A-dep")) -> fourAdep_GC3
-
-#fourAindep
-fourAindep_GC1 <- lapply(CDS_fourAindep_fasta, GC1)
-fourAindep_GC2 <- lapply(CDS_fourAindep_fasta, GC2)
-fourAindep_GC3 <- lapply(CDS_fourAindep_fasta, GC3)
-
-fourAindep_GC1 %>%
-  as.data.frame() %>%
-  gather(key = transcript, value = GC1) %>%
-  mutate(translation = rep("4A-indep")) -> fourAindep_GC1
-
-fourAindep_GC2 %>%
-  as.data.frame() %>%
-  gather(key = transcript, value = GC2) %>%
-  mutate(translation = rep("4A-indep")) -> fourAindep_GC2
-
-fourAindep_GC3 %>%
-  as.data.frame() %>%
-  gather(key = transcript, value = GC3) %>%
-  mutate(translation = rep("4A-indep")) -> fourAindep_GC3
-
-GC1_data <- bind_rows(fourAdep_GC1, fourAindep_GC1)
-GC2_data <- bind_rows(fourAdep_GC2, fourAindep_GC2)
-GC3_data <- bind_rows(fourAdep_GC3, fourAindep_GC3)
-
-#plot
-#GC1
-t <- wilcox.test(data = GC1_data, GC1 ~ translation,
-                 paired = F,
-                 alternative = "two.sided",
-                 var.equal = F,
-                 conf.int = T)
-p_label <- myP(t)
-
-density_plot <- ggplot(data = GC1_data, aes(x = GC1, colour = translation, fill = translation))+
   geom_density(alpha = 0.5)+
   scale_fill_manual(values=c("#74add1", "#fdae61"))+
   scale_colour_manual(values=c("#74add1", "#fdae61"))+
-  xlab('GC1 content')+
-  xlim(c(0.25, 0.75))+
+  xlab('G content')+
+  xlim(c(0,50))+
+  geom_vline(xintercept = fourAdep_mean, colour = "#74add1", linetype="dashed", size = 2)+
+  geom_vline(xintercept = fourAindep_mean, colour = "#fdae61", linetype="dashed", size = 2)+
   myTheme+
   ggtitle(p_label)
-pdf(file = "GC1_content_density.pdf", width = 4, height = 4)
+pdf(file = paste0(region, "_G_content_density.pdf"), width = 4, height = 4)
 print(density_plot)
 dev.off()
 
-#GC2
-t <- wilcox.test(data = GC2_data, GC2 ~ translation,
+#G4NN scores
+t <- wilcox.test(data = merged_data, G4NN ~ translation,
                  paired = F,
                  alternative = "two.sided",
                  var.equal = F,
                  conf.int = T)
 p_label <- myP(t)
 
-density_plot <- ggplot(data = GC2_data, aes(x = GC2, colour = translation, fill = translation))+
-  geom_density(alpha = 0.5)+
-  scale_fill_manual(values=c("#74add1", "#fdae61"))+
-  scale_colour_manual(values=c("#74add1", "#fdae61"))+
-  xlab('GC2 content')+
-  xlim(c(0.25, 0.75))+
-  myTheme+
-  ggtitle(p_label)
-pdf(file = "GC2_content_density.pdf", width = 4, height = 4)
-print(density_plot)
-dev.off()
+fourAdep_mean <- mean(merged_data$G4NN[merged_data$translation == "4A-dep"])
+fourAindep_mean <- mean(merged_data$G4NN[merged_data$translation == "4A-indep"])
 
-#GC3
-t <- wilcox.test(data = GC3_data, GC3 ~ translation,
-                 paired = F,
-                 alternative = "two.sided",
-                 var.equal = F,
-                 conf.int = T)
-p_label <- myP(t)
-
-density_plot <- ggplot(data = GC3_data, aes(x = GC3, colour = translation, fill = translation))+
-  geom_density(alpha = 0.5)+
-  scale_fill_manual(values=c("#74add1", "#fdae61"))+
-  scale_colour_manual(values=c("#74add1", "#fdae61"))+
-  xlab('GC3 content')+
-  xlim(c(0.25, 0.75))+
-  myTheme+
-  ggtitle(p_label)
-pdf(file = "GC3_content_density.pdf", width = 4, height = 4)
-print(density_plot)
-dev.off()
-
-
-#G4 predictions----
-G4_data <- read_tsv(file = file.path(home, "raw_data/G4_RNA_screener/fpUTR_G4_screener.tsv"), col_names = T)
-
-G4_data %>%
-  select(-X1) %>%
-  rename(transcript = description) %>%
-  filter(transcript %in% merged_data$transcript) %>%
-  inner_join(transcript_to_geneID, by = "transcript") %>%
-  inner_join(translation_data, by = "gene") %>%
-  group_by(transcript) %>%
-  top_n(wt = G4NN, n = 1) -> merged_G4_data
-
-#plot G4NN
-t <- wilcox.test(data = merged_G4_data, G4NN ~ translation,
-                 paired = F,
-                 alternative = "two.sided",
-                 var.equal = F,
-                 conf.int = T)
-p_label <- myP(t)
-
-fourAdep_mean <- mean(merged_G4_data$G4NN[merged_G4_data$translation == "4A-dep"])
-fourAindep_mean <- mean(merged_G4_data$G4NN[merged_G4_data$translation == "4A-indep"])
-
-density_plot <- ggplot(data = merged_G4_data, aes(x = G4NN, colour = translation, fill = translation))+
+density_plot <- ggplot(data = merged_data, aes(x = G4NN, colour = translation, fill = translation))+
   geom_density(alpha = 0.5)+
   scale_fill_manual(values=c("#74add1", "#fdae61"))+
   scale_colour_manual(values=c("#74add1", "#fdae61"))+
@@ -399,4 +213,15 @@ pdf(file = "fpUTR_G4NN_density.pdf", width = 4, height = 4)
 print(density_plot)
 dev.off()
 
+#export legend----
+density_plot <- ggplot(data = merged_data, aes(x = G_content, colour = translation, fill = translation))+
+  geom_density()+
+  scale_fill_manual(values=c("#74add1", "#fdae61"))+
+  scale_colour_manual(values=c("#74add1", "#fdae61"))+
+  theme(legend.title = element_blank())
+
+density_legend <- myLegend(density_plot)
+pdf(file = 'density_legend.pdf', height = 1, width = 1)
+grid.arrange(density_legend)
+dev.off()
 
