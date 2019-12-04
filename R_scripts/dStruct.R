@@ -1,25 +1,16 @@
-###This script was written by Joseph A.Waldron and produces all panels from Figure 6 in Waldron et al. (2019) Genome Biology
-###Input data can be downloaded from the Gene Expression Omnibus (GEO) database accessions GSE134865 and GSE134888 which can be found at 
-###https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134865 and https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134888
+###This script was written by Joseph A. Waldron and produces all panels from Figure 6 in Waldron et al. (2020) Genome Biology
+###Input data first needs to be generated using the Shell scripts from this repository (see README file)
+###dStruct package can be downloaded from https://github.com/AviranLab/dStruct
 
-#load packages
+#load packages----
 library(tidyverse)
 library(dStruct)
 library(grid)
 library(gridExtra)
 library(viridis)
 
-#set home directory----
-home <- '' #this needs to be set to the directory containing the data
-
-#set variables----
-#posterior probability thresholds
-positive_change <- 0.25
-no_change <- 0.02
-
-#filter thresholds
-coverage <- 1
-fp_coverage <- 1.5
+#import variables----
+source("Structure_seq_variables.R")
 
 #set the significance threshold for the windows identified by dStruct
 sig_threshold <- 0.25
@@ -102,45 +93,8 @@ no_labels_theme <- my_theme+
         axis.text = element_blank())
 
 #load data----
-#coverage data
-coverage_data <- read_csv(file = file.path(home, 'plus_DMS_coverage.csv'), col_names = T) #download from GSE134865
-ctrl_fp_coverage_data <- read_csv(file = file.path(home, 'control_minus_DMS_fp_10_coverage.csv'), col_names = T) #download from GSE134865
-hipp_fp_coverage_data <- read_csv(file = file.path(home, 'hippuristanol_minus_DMS_fp_10_coverage.csv'), col_names = T) #download from GSE134865
-fp_coverage_data <- inner_join(ctrl_fp_coverage_data, hipp_fp_coverage_data, by = "transcript")
-rm(ctrl_fp_coverage_data, hipp_fp_coverage_data)
-
-#totals data
-totals_data <- read_tsv(file = file.path(home, 'penn-DE.mmdiffMCF7'), col_names = T, skip = 1) #download from GSE134888
-totals_data %>%
-  mutate(abundance = case_when(posterior_probability > positive_change ~ alpha1,
-                               posterior_probability < positive_change ~ alpha0)) %>%
-  rename(transcript = feature_id) %>%
-  select(transcript, abundance) -> abundance_data
-rm(totals_data)
-
-#translation data
-translation_data <- read_tsv(file = file.path(home, 'penn-DOD-gene.mmdiffMCF7'), col_names = T, skip = 1) #download from GSE134888
-translation_data %>%
-  rename(gene = feature_id) %>%
-  mutate(DOD = eta1_1 - eta1_2,
-         translation = factor(case_when(posterior_probability > positive_change & DOD < 0 ~ "4A-dep",
-                                        posterior_probability < no_change ~ "4A-indep"), levels = c("4A-dep", "4A-indep"), ordered = T)) %>%
-  filter(translation == "4A-dep" | translation == "4A-indep" ) %>%
-  select(gene, translation, posterior_probability) -> translation_list
-
-#transcript to gene ID
-transcript_to_geneID <- read_tsv(file = file.path(home, 'MCF7_2015_transcript_to_gene_map.txt'), col_names = T) #download from GSE134865
-
-#FASTA composition data
-#uses a for loop to load composition data for each spliced fasta
-#download data from GSE134865
-FASTA_compositions_list <- list()
-for (region in c("fpUTR", "CDS", "tpUTR")) {
-  df <- read_csv(file = file.path(home, paste0('MCF7_2015_', region, 's_composition.csv')), col_names = T)
-  df$region <- rep(region, nrow(df))
-  FASTA_compositions_list[[region]] <- df
-}
-FASTA_compositions <- do.call("rbind", FASTA_compositions_list)
+#load common data
+source("Structure_seq_common_data.R")
 
 #make a list of filtered transcripts----
 #the following pipe makes a vector of all transcript IDs that have a 5'UTR, CDS and 3'UTR,
@@ -166,11 +120,9 @@ FASTA_compositions %>%
   pull(transcript) -> filtered_transcripts
 
 #read in csvs----
-#the following for loops reads in a reactivity csv for each replicate in each condition for each transcript and makes a data frame for
-#each transcript with 6 columns; A1-3 being the reactivity in control 1-3 and B1-3 being the reactivity in hippuristanol 1-3
-#and then saves each data frame in a list
-#a directory containing all transcript csv files for every replicate within each condition can be created by running the react_to_csv.py script on the relevant react file
-#react files can be downloaded from GSE134865 and react_to_csv.py is available at https://github.com/StructureFold2/StructureFold2
+#the following for loops reads in a reactivity csv for each replicate in each condition for each transcript and makes a data frame for each transcript with 6 columns;
+#A1-3 being the reactivity in control 1-3 and B1-3 being the reactivity in hippuristanol 1-3. It then saves each data frame in a list.
+#Directories containing all transcript csv files for every replicate within each condition can be created by running SF2_pipeline_3c_react_CSVs.sh
 
 reactivity_list <- list()
 for (transcript in filtered_transcripts) {
@@ -178,7 +130,7 @@ for (transcript in filtered_transcripts) {
   for (condition in c("control", "hippuristanol")) {
     for (i in 1:3) {
       fyle <- paste0(paste(transcript, condition, i, sep = "_"), ".csv")
-      path <- file.path(home, paste(condition, i, "all_csvs", sep = "_"))
+      path <- file.path(paste(condition, i, "all_csvs", sep = "_"))
       df <- read.csv(file = file.path(path, fyle), header = T)
       df$condition <- rep(paste0(condition, i), nrow(df))
       alist[[paste(condition, i, sep = "_")]] <- df
