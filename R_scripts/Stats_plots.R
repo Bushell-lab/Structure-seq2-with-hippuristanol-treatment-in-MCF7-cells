@@ -1,25 +1,12 @@
-###This script was written by Joseph A.Waldron and produces panels 2B-D, 4A-C, S4A-J and S7B-C in Waldron et al. (2019) Genome Biology
-###Input data can be downloaded from the Gene Expression Omnibus (GEO) database accessions GSE134865 and GSE134888 which can be found at 
-###https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134865 and https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134888
+###This script was written by Joseph A. Waldron and produces panels 2B-D, 4A-C, S4A-J and S7B-C in Waldron et al. (2020) Genome Biology
+###Input data first needs to be generated using the Shell scripts from this repository (see README file)
 
-#load packages
+#load packages----
 library(tidyverse)
 library(viridis)
 
-#set home directory----
-home <- '' #this needs to be set to the directory containing the data
-
-#set variables----
-#posterior probability thresholds
-positive_change <- 0.25
-no_change <- 0.02
-
-#filter thresholds
-coverage <- 1
-fp_coverage <- 1.5
-
-#3' end trim length
-tp_trim <- 125
+#import variables----
+source("Structure_seq_variables.R")
 
 #write functions----
 #makes a label from the output of either t.test or wilcox.test to include the p value and 95% confidence limits
@@ -75,47 +62,19 @@ scatter_theme <- theme_bw()+
         axis.title = element_text(size=20))
 
 #load data----
-#coverage data
-coverage_data <- read_csv(file = file.path(home, 'plus_DMS_coverage.csv'), col_names = T) #download from GSE134865
-ctrl_fp_coverage_data <- read_csv(file = file.path(home, 'control_minus_DMS_fp_10_coverage.csv'), col_names = T) #download from GSE134865
-hipp_fp_coverage_data <- read_csv(file = file.path(home, 'hippuristanol_minus_DMS_fp_10_coverage.csv'), col_names = T) #download from GSE134865
-fp_coverage_data <- inner_join(ctrl_fp_coverage_data, hipp_fp_coverage_data, by = "transcript")
-rm(ctrl_fp_coverage_data, hipp_fp_coverage_data)
-
-#totals data
-totals_data <- read_tsv(file = file.path(home, 'penn-DE.mmdiffMCF7'), col_names = T, skip = 1) #download from GSE134888
-totals_data %>%
-  mutate(abundance = case_when(posterior_probability > positive_change ~ alpha1,
-                               posterior_probability < positive_change ~ alpha0)) %>%
-  rename(transcript = feature_id) %>%
-  select(transcript, abundance) -> abundance_data
-rm(totals_data)
-
-#translation data
-translation_data <- read_tsv(file = file.path(home, 'penn-DOD-gene.mmdiffMCF7'), col_names = T, skip = 1) #download from GSE134888
-translation_data %>%
-  rename(gene = feature_id) %>%
-  mutate(DOD = eta1_1 - eta1_2,
-         translation = factor(case_when(posterior_probability > positive_change & DOD < 0 ~ "4A-dep",
-                                        posterior_probability < no_change ~ "4A-indep"), levels = c("4A-dep", "4A-indep"), ordered = T)) -> translation_data
-
-translation_data %>%
-  filter(translation == "4A-dep" | translation == "4A-indep" ) %>%
-  select(gene, translation, posterior_probability) -> translation_list
-
-#transcript to gene ID
-transcript_to_geneID <- read_tsv(file = file.path(home, 'MCF7_2015_transcript_to_gene_map.txt'), col_names = T) #download from GSE134865
+#load common data
+source("Structure_seq_common_data.R")
 
 #stats data
 #uses a for loop to read in data for each region and each condition
-#download data from GSE134865
+#data can be generated with SF2_pipeline_3b_statistics.sh
 stats_list <- list()
 for (region in c("fpUTR", "CDS", "tpUTR")) {
   for (condition in c("control", "hippuristanol")) {
     if (region == "tpUTR") {
-      df <- read_csv(file = file.path(home, paste0(condition, '_', region, '_', tp_trim, 'trim_20minlen_statistics.csv')), col_names = T)
+      df <- read_csv(file = file.path(paste0(condition, '_', region, '_', tp_trim, 'trim_20minlen_statistics.csv')), col_names = T)
     } else {
-      df <- read_csv(file = file.path(home, paste0(condition, '_', region, '_0trim_20minlen_statistics.csv')), col_names = T)
+      df <- read_csv(file = file.path(paste0(condition, '_', region, '_0trim_20minlen_statistics.csv')), col_names = T)
     }
     names(df) <- c("transcript", "max", "average", "std", "gini")
     df$condition <- factor(rep(condition, nrow(df)), levels = c("control", "hippuristanol"), labels = c("Ctrl", "Hipp"), ordered = T)
@@ -125,7 +84,49 @@ for (region in c("fpUTR", "CDS", "tpUTR")) {
 }
 stats_data <- do.call("rbind", stats_list)
 
-#filter average data----
+#MFE
+#uses a for loop to read in MFE data for each each condition for whole 5'UTRs (if 5'UTR <= 100) and windows (if 5'UTR > 100)
+#data can be generated with SF2_pipeline_3d_folding.sh
+MFE_list <- list()
+for (condition in c("control", "hippuristanol")) {
+  whole_fpUTRs <- read_csv(file = file.path(paste(condition, 'fpUTR_MFE.csv', sep = "_")), col_names = T)
+  whole_fpUTRs %>%
+    mutate(condition = factor(rep(condition), levels = c("control", "hippuristanol"), labels = c("Ctrl", "Hipp"), ordered = T),
+           step = rep(0)) -> whole_fpUTRs
+  
+  windows <- read_csv(file = file.path(paste(condition, 'fpUTR_100_win_10_step_MFE.csv', sep = "_")), col_names = T)
+  windows %>%
+    mutate(step = as.numeric(str_replace(transcript, ".+_", "")),
+           transcript = str_replace(transcript, "_.+", ""),
+           condition = factor(rep(condition), levels = c("control", "hippuristanol"), labels = c("Ctrl", "Hipp"), ordered = T)) -> windows
+  
+  MFE_list[[condition]] <- bind_rows(whole_fpUTRs, windows)
+}
+MFE <- do.call("rbind", MFE_list)
+
+#Strandedness
+#data can be generated with SF2_pipeline_3d_folding.sh
+#uses a for loop to read in strandedness data for each each condition for whole 5'UTRs (if 5'UTR <= 100) and windows (if 5'UTR > 100)
+strandedness_list <- list()
+for (condition in c("control", "hippuristanol")) {
+  whole_fpUTRs <- read_csv(file = file.path(home, paste(condition, 'fpUTR_strands.csv', sep = "_")), col_names = T)
+  whole_fpUTRs %>%
+    mutate(condition = factor(rep(condition), levels = c("control", "hippuristanol"), labels = c("Ctrl", "Hipp"), ordered = T),
+           step = rep(0)) -> whole_fpUTRs
+  
+  windows <- read_csv(file = file.path(home, paste(condition, 'fpUTR_100_win_10_step_strands.csv', sep = "_")), col_names = T)
+  windows %>%
+    mutate(step = as.numeric(str_replace(transcript, ".+_", "")),
+           transcript = str_replace(transcript, "_.+", ""),
+           condition = factor(rep(condition), levels = c("control", "hippuristanol"), labels = c("Ctrl", "Hipp"), ordered = T)) -> windows
+  
+  strandedness_list[[condition]] <- bind_rows(whole_fpUTRs, windows)
+}
+strandedness <- do.call("rbind", strandedness_list)
+
+#reformat, filter and plot data----
+
+#average reactivity----
 #The following two pipes will remove transcripts which have an NA for average in either condition and any region
 #filter by coverage and 5' coverage (fp_coverage) and then pick the most abundant transcript per gene
 
@@ -154,7 +155,7 @@ stats_data %>%
   
 print(paste("average plots n = ", n_distinct(filtered_average_data$transcript)))
 
-#plot average data----
+#plot
 #the following for loop will create and export as pdfs, the following plots 
 #violin and scatter plot for control vs hippuristanol average reactivity
 #violin plot for 4A-dep vs 4A-indep delta reactivity
@@ -281,7 +282,7 @@ for (region in c("fpUTR", "CDS", "tpUTR")) {
   dev.off()
 }
 
-#filter gini data----
+#gini----
 #The following two pipes will remove transcripts which have an NA for gini in either condition and any region
 #filter by coverage and 5' coverage (fp_coverage) and then pick the most abundant transcript per gene
 stats_data %>%
@@ -309,7 +310,7 @@ stats_data %>%
 
 print(paste("gini plots n = ", n_distinct(filtered_gini_data$transcript)))
 
-#plot gini data----
+#plot
 #the following for loop will create and export as pdfs, violin and scatter plot for control vs hippuristanol gini
 
 for (region in c("fpUTR", "CDS", "tpUTR")) {
@@ -357,26 +358,6 @@ for (region in c("fpUTR", "CDS", "tpUTR")) {
 }
 
 #MFE----
-#load data
-#uses a for loop to read in MFE data for each each condition for whole 5'UTRs (if 5'UTR <= 100) and windows (if 5'UTR > 100)
-#download data from GSE134865
-MFE_list <- list()
-for (condition in c("control", "hippuristanol")) {
-  whole_fpUTRs <- read_csv(file = file.path(home, paste(condition, 'fpUTR_MFE.csv', sep = "_")), col_names = T)
-  whole_fpUTRs %>%
-    mutate(condition = factor(rep(condition), levels = c("control", "hippuristanol"), labels = c("Ctrl", "Hipp"), ordered = T),
-           step = rep(0)) -> whole_fpUTRs
-  
-  windows <- read_csv(file = file.path(home, paste(condition, 'fpUTR_100_win_10_step_MFE.csv', sep = "_")), col_names = T)
-  windows %>%
-    mutate(step = as.numeric(str_replace(transcript, ".+_", "")),
-           transcript = str_replace(transcript, "_.+", ""),
-           condition = factor(rep(condition), levels = c("control", "hippuristanol"), labels = c("Ctrl", "Hipp"), ordered = T)) -> windows
-  
-  MFE_list[[condition]] <- bind_rows(whole_fpUTRs, windows)
-}
-MFE <- do.call("rbind", MFE_list)
-
 #filter
 #The following pipe will filter by coverage and 5' coverage (fp_coverage) and then pick the most abundant transcript per gene
 #and then calculate the minimum and average MFE
@@ -523,26 +504,6 @@ MFE_delta_violin
 dev.off()
 
 #strandedness----
-#load data
-#uses a for loop to read in strandedness data for each each condition for whole 5'UTRs (if 5'UTR <= 100) and windows (if 5'UTR > 100)
-#download data from GSE134865
-strandedness_list <- list()
-for (condition in c("control", "hippuristanol")) {
-  whole_fpUTRs <- read_csv(file = file.path(home, paste(condition, 'fpUTR_strands.csv', sep = "_")), col_names = T)
-  whole_fpUTRs %>%
-    mutate(condition = factor(rep(condition), levels = c("control", "hippuristanol"), labels = c("Ctrl", "Hipp"), ordered = T),
-           step = rep(0)) -> whole_fpUTRs
-  
-  windows <- read_csv(file = file.path(home, paste(condition, 'fpUTR_100_win_10_step_strands.csv', sep = "_")), col_names = T)
-  windows %>%
-    mutate(step = as.numeric(str_replace(transcript, ".+_", "")),
-           transcript = str_replace(transcript, "_.+", ""),
-           condition = factor(rep(condition), levels = c("control", "hippuristanol"), labels = c("Ctrl", "Hipp"), ordered = T)) -> windows
-  
-  strandedness_list[[condition]] <- bind_rows(whole_fpUTRs, windows)
-}
-strandedness <- do.call("rbind", strandedness_list)
-
 #filter
 #The following pipe will filter by coverage and 5' coverage (fp_coverage) and then pick the most abundant transcript per gene
 #and then calculate the maximum and average strandedness
