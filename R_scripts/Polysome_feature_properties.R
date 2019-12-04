@@ -1,19 +1,13 @@
-###This script was written by Joseph A.Waldron and produces panels 3B-E in Waldron et al. (2019) Genome Biology
-###Input data can be downloaded from the Gene Expression Omnibus (GEO) database accessions GSE134865 and GSE134888 which can be found at 
-###https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134865 and https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134888
+###This script was written by Joseph A. Waldron and produces panels 3B-E in Waldron et al. (2020) Genome Biology
+###Input data first needs to be generated using the Shell scripts from this repository (see README file)
 
-###Imports
+#Imports----
 library(grid)
 library(gridExtra)
 library(tidyverse)
 
-#set home directory----
-home <- '' #this needs to be set to the directory containing the data
-
-#set variables----
-#posterior probability thresholds
-positive_change <- 0.25
-no_change <- 0.02
+#import variables----
+source("Structure_seq_variables.R")
 
 #write functions----
 #makes a label from the output of either t.test or wilcox.test to include the p value and 95% confidence limits
@@ -61,36 +55,17 @@ myTheme <- theme_bw()+
         plot.title = element_text(hjust = 1, vjust = 0, size=14, face="bold"))
 
 #load data----
-#totals data
-totals_data <- read_tsv(file = file.path(home, 'penn-DE.mmdiffMCF7'), col_names = T, skip = 1) #download from GSE134888
-totals_data %>%
-  mutate(abundance = case_when(posterior_probability > positive_change ~ alpha1,
-                               posterior_probability < positive_change ~ alpha0)) %>%
-  rename(transcript = feature_id) %>%
-  select(transcript, abundance) -> abundance_data
-rm(totals_data)
-
-#translation data
-translation_data <- read_tsv(file = file.path(home, 'penn-DOD-gene.mmdiffMCF7'), col_names = T, skip = 1) #download from GSE134888
-translation_data %>%
-  rename(gene = feature_id) %>%
-  mutate(DOD = eta1_1 - eta1_2,
-         translation = factor(case_when(posterior_probability > positive_change & DOD < 0 ~ "4A-dep",
-                                        posterior_probability < no_change ~ "4A-indep"), levels = c("4A-dep", "4A-indep"), ordered = T)) -> translation_data
-
-#transcript to gene ID
-transcript_to_geneID <- read_tsv(file = file.path(home, 'MCF7_2015_transcript_to_gene_map.txt'), col_names = T) #download from GSE134865
-
+#load common data
+source("Structure_seq_common_data.R")
 #5'UTR FASTA composition data
-fpUTR_fasta_composition <- read_csv(file = file.path(home, 'MCF7_2015_fpUTRs_composition.csv'), col_names = T) #download data from GSE134865
 
 #G4 predictions
-G4_data <- read_tsv(file = file.path(home, "fpUTR_G4_screener.tsv"), col_names = T) #download data from GSE134865
+G4_data <- read_tsv(file = "fpUTR_G4_screener.tsv", col_names = T) #generate with Custom_scripts.sh
 
 #sort data----
 #the following pipe mutates G and C contenet into percentages by multiplying by 100, merges data, filters it to include only 4A-dep and 4A-indep transcripts
 #and then selects the most abundant transcript per gene and then the maximum G4NN score per transcript
-fpUTR_fasta_composition %>%
+FASTA_compositions_list$fpUTR %>%
   mutate(G_content = G_content * 100,
          C_content = C_content * 100) %>%
   inner_join(G4_data, by = c("transcript" = "description")) %>%
