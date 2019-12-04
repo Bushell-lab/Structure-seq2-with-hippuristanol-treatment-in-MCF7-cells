@@ -13,7 +13,7 @@ ctrl_fp_coverage_data %>%
 rm(ctrl_fp_coverage_data, hipp_fp_coverage_data)
 
 #totals data
-totals_data <- read_tsv(file = 'penn-DE.mmdiffMCF7.tsv', col_names = T, skip = 1) #download from GSE134888 at https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134888
+totals_data <- read_tsv(file = 'GSE134888_penn-DE.mmdiffMCF7.tsv', col_names = T, skip = 1) #download from GSE134888 at https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134888
 totals_data %>%
   dplyr::mutate(abundance = case_when(posterior_probability > positive_change ~ alpha1,
                                posterior_probability < positive_change ~ alpha0)) %>%
@@ -22,7 +22,7 @@ totals_data %>%
 rm(totals_data)
 
 #translation data
-translation_data <- read_tsv(file = 'penn-DOD-gene.mmdiffMCF7.tsv', col_names = T, skip = 1) #download from GSE134888 at https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134888
+translation_data <- read_tsv(file = 'GSE134888_penn-DOD-gene.mmdiffMCF7.tsv', col_names = T, skip = 1) #download from GSE134888 at https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134888
 translation_data %>%
   dplyr::rename(gene = feature_id) %>%
   dplyr::mutate(DOD = eta1_1 - eta1_2,
