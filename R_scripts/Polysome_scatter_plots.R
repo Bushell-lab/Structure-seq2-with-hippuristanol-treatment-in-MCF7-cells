@@ -1,17 +1,12 @@
-###This script was written by Joseph A.Waldron and produces panels 2A and 3A in Waldron et al. (2019) Genome Biology
-###Input data can be downloaded from the Gene Expression Omnibus (GEO) database accessions GSE134888 which can be found at 
+###This script was written by Joseph A. Waldron and produces panels 2A and 3A in Waldron et al. (2020) Genome Biology
+###Input data can be downloaded from the Gene Expression Omnibus (GEO) database accession GSE134888 which can be found at 
 ###https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134888
 
-#Imports
+#Imports----
 library(tidyverse)
 
-#set home directory----
-home <- '' #this needs to be set to the directory containing the data
-
-#set variables----
-#posterior probability thresholds
-positive_change <- 0.25
-no_change <- 0.02
+#import variables----
+source("Structure_seq_variables.R")
 
 #make theme----
 myTheme <- theme_bw()+
@@ -21,7 +16,7 @@ myTheme <- theme_bw()+
         legend.text = element_text(size=18))
 
 #read in translation data----
-translation_data <- read_tsv(file = file.path(home, 'penn-DOD-gene.mmdiffMCF7'), col_names = T, skip = 1)
+translation_data <- read_tsv(file = 'GSE134888_penn-DOD-gene.mmdiffMCF7.tsv', col_names = T, skip = 1)
 
 #4A-dep logFC plot----
 #assign each gene as 4A-dep, 4A-indep, 4A-antidep and NA based on posterior probability and DOD
