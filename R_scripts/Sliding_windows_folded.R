@@ -1,20 +1,14 @@
 ###This script was written by Joseph A.Waldron and produces panels 1F-G in Waldron et al. (2019) Genome Biology
-###Input data can be downloaded from the Gene Expression Omnibus (GEO) database accessions GSE134865 and GSE134888 which can be found at 
-###https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134865 and https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134888
+###Input data first needs to be generated using the Shell scripts from this repository (see README file)
 
 ###Imports
 library(gridExtra)
 library(grid)
 library(tidyverse)
 
-#set home directory----
-home <- '' #this needs to be set to the directory containing the data
+#import variables----
+source("Structure_seq_variables.R")
 
-#set variables----
-#filter thresholds
-coverage <- 1
-fp_coverage <- 1.5
-positive_change <- 0.25
 min_length <- 100 #sets minimum 5'UTR length
 wStep <- 10 #sets window step size
 wLen <- 50 #sets window size
@@ -50,31 +44,13 @@ myTheme <- theme_bw()+
         legend.position = "none")
 
 #load data----
-#coverage data
-coverage_data <- read_csv(file = file.path(home, 'plus_DMS_coverage.csv'), col_names = T) #download from GSE134865
-ctrl_fp_coverage_data <- read_csv(file = file.path(home, 'control_minus_DMS_fp_10_coverage.csv'), col_names = T) #download from GSE134865
-hipp_fp_coverage_data <- read_csv(file = file.path(home, 'hippuristanol_minus_DMS_fp_10_coverage.csv'), col_names = T) #download from GSE134865
-fp_coverage_data <- inner_join(ctrl_fp_coverage_data, hipp_fp_coverage_data, by = "transcript")
-rm(ctrl_fp_coverage_data, hipp_fp_coverage_data)
-
-#totals data
-totals_data <- read_tsv(file = file.path(home, 'penn-DE.mmdiffMCF7'), col_names = T, skip = 1) #download from GSE134888
-totals_data %>%
-  mutate(abundance = case_when(posterior_probability > positive_change ~ alpha1,
-                               posterior_probability < positive_change ~ alpha0)) %>%
-  rename(transcript = feature_id) %>%
-  select(transcript, abundance) -> abundance_data
-rm(totals_data)
-
-#transcript to gene ID
-transcript_to_geneID <- read_tsv(file = file.path(home, 'MCF7_2015_transcript_to_gene_map.txt'), col_names = T) #download from GSE134865
-
-#5'UTR FASTA composition data
-fpUTR_fasta_composition <- read_csv(file = file.path(home, 'MCF7_2015_fpUTRs_composition.csv'), col_names = T) #download data from GSE134865
+#load common data
+source("Structure_seq_common_data.R")
 
 #windows data
+#generate with SF2_pipeline_3d_folding.sh
 #read in fasta composition of all window sequences and seperate transcript and step into two different variables
-windows_FASTA <- read_csv(file = file.path(home, paste('fpUTR', wLen, 'win', wStep, 'step_composition.csv', sep = "_")), col_names = T) #download data from GSE134865
+windows_FASTA <- read_csv(file = file.path(paste0('fpUTR_', wLen, 'win_', wStep, 'step_composition.csv')), col_names = T)
 windows_FASTA %>%
   mutate(step = as.integer(str_replace(transcript, ".+\\_", "")),
          transcript = str_replace(transcript, "\\_.+", "")) -> windows_FASTA
@@ -83,7 +59,7 @@ windows_FASTA %>%
 #and filter by coverage and 5' coverage and select the most abundant transcript per gene
 MFE_data_list <- list()
 for (condition in c("control", "hippuristanol")) {
-  df <- read_csv(file = file.path(home, paste(condition, 'fpUTR', wLen, 'win', wStep, 'step_MFE.csv', sep = "_")), col_names = T)#download data from GSE134865
+  df <- read_csv(file = file.path(paste0(condition, '_fpUTR_', wLen, 'win_', wStep, 'step_MFE.csv')), col_names = T)
   
   df %>%
     mutate(step = as.integer(str_replace(transcript, ".+\\_", "")),
@@ -110,7 +86,7 @@ MFE_data <- do.call("rbind", MFE_data_list)
 
 #merge data----
 MFE_data %>%
-  inner_join(fpUTR_fasta_composition[, c("transcript", "length")], by = "transcript") %>%
+  inner_join(FASTA_compositions_list$fpUTR[, c("transcript", "length")], by = "transcript") %>%
   rename(fpUTR_length = length) %>%
   inner_join(windows_FASTA, by = c("transcript", "step")) %>%
   mutate(GC_content = GC_content * 100) %>%
