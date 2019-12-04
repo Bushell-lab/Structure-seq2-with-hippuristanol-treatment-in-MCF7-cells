@@ -1,12 +1,8 @@
-###This script was written by Joseph A.Waldron and produces panels S1F-G in Waldron et al. (2019) Genome Biology
-###Input data can be downloaded from the Gene Expression Omnibus (GEO) database accessions GSE134865 which can be found at 
-###https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134865
+###This script was written by Joseph A. Waldron and produces panels S1F-G in Waldron et al. (2020) Genome Biology
+###Input data first needs to be generated using the Shell scripts from this repository (see README file)
 
-###Imports
+#Imports----
 library(tidyverse)
-
-#set home directory----
-home <- '' #this needs to be set to the directory containing the data
 
 #write theme----
 my_theme <- theme_bw()+
@@ -16,17 +12,35 @@ my_theme <- theme_bw()+
         legend.title = element_blank(),
         legend.text = element_text(size=18),
         panel.border = element_blank(),
-        panel.grid = element_blank())
+        panel.grid = element_blank())+
 
-#specificity----
-#read data
-specificity <- read_csv(file = file.path(home, "specificity.csv"), col_names = T)
+#load data----
+#specificity
+specificity <- read_csv(file = file.path(home, "MCF7_2015/raw_data/specificity/specificity.csv"), col_names = T) #generated with SF2_pipeline_3a_QC.sh
 
-#reformat data
+#ligation bias
+ligation_list <- list()
+for (condition in c("control_minus_DMS", "control_plus_DMS", "hippuristanol_minus_DMS", "hippuristanol_plus_DMS")) {
+  for (replicate in 1:3) {
+    df <- read_csv(file = file.path(home, "ligation_bias", paste(condition, replicate, "ligation_bias.csv", sep = "_")), col_names = T) #generated with SF2_pipeline_1.sh
+    df %>%
+      mutate(condition = rep(condition, nrow(df)),
+             replicate = rep(replicate, nrow(df)),
+             count = as.numeric(count)) -> df
+    ligation_list[[paste(condition, replicate, sep = "_")]] <- df
+  }
+}
+ligation <- do.call("rbind", ligation_list)
+
+#reformat and plot data----
+#specificity
 specificity %>%
   select(base, control_minus_DMS_specificity, control_plus_DMS_specificity, hippuristanol_minus_DMS_specificity, hippuristanol_plus_DMS_specificity) %>%
   gather(key = condition, value = percentage, control_minus_DMS_specificity, control_plus_DMS_specificity, hippuristanol_minus_DMS_specificity, hippuristanol_plus_DMS_specificity) %>%
-  mutate(base = factor(base, levels = c("T", "G", "C", "A"), labels = c("U", "G", "C", "A"), ordered = T),
+  mutate(base = factor(base,
+                       levels = c("T", "G", "C", "A"), 
+                       labels = c("U", "G", "C", "A"),
+                       ordered = T),
          condition = factor(condition, 
                             levels = c("hippuristanol_plus_DMS_specificity", "control_plus_DMS_specificity", "hippuristanol_minus_DMS_specificity", "control_minus_DMS_specificity"), 
                             labels = c("Hipp / DMS (+)", "Ctrl / DMS (+)", "Hipp / DMS (-)", "Ctrl / DMS (-)"),
@@ -44,57 +58,44 @@ pdf(file = 'specificity.pdf', height = 4, width = 6)
 print(specificity_plot)
 dev.off()
 
-#ligation bias----
-#read data
-ligation_list <- list()
-for (condition in c("control_minus_DMS", "control_plus_DMS", "hippuristanol_minus_DMS", "hippuristanol_plus_DMS")) {
-  df <- read_csv(file = file.path(home, "ligation_bias", paste0(condition, "_ligation_bias.csv")), col_names = T)
-  df %>%
-    mutate(nt = factor(nt,
-                       levels = c("T", "G", "C", "A"), 
-                       labels = c("U", "G", "C", "A"),
-                       ordered = T),
-           condition = factor(condition, 
-                              levels = c("hippuristanol_plus_DMS", "control_plus_DMS", "hippuristanol_minus_DMS", "control_minus_DMS"), 
-                              labels = c("Hipp / DMS (+)", "Ctrl / DMS (+)", "Hipp / DMS (-)", "Ctrl / DMS (-)"),
-                              ordered = T),
-           position = factor(position),
-           count = as.numeric(count)) -> df
-  ligation_list[[condition]] <- df
-}
+#ligation bias
+#Calculate the total counts
+total_counts <- sum(ligation$count[ligation$position == "total_counts" & ligation$nt != "N"])
 
-ligation <- do.call("rbind", ligation_list)
-
-#reformat data
+#for each nt, divide the total counts of that nt by the total counts to get a percentage
 ligation %>%
-  filter(position == "all") %>%
+  filter(position == "total_counts" & nt != "N") %>%
   group_by(nt) %>%
   summarise(count = sum(count)) %>%
-  mutate(condition = factor(rep("transcriptome"))) -> transcriptome_counts
+  ungroup() %>%
+  mutate(percentage = count / total_counts,
+         condition = rep("transcriptome")) %>%
+  select(condition, nt, percentage) -> transcriptome_counts
 
-transcriptome_counts %>%
-  group_by(condition) %>%
-  summarise(total_counts = sum(count)) %>%
-  inner_join(transcriptome_counts, by = "condition") %>%
-  mutate(percentage = count / total_counts) -> transcriptome_counts
-
+#calculate the total number counts at position_1 for each condition
 ligation %>%
-  filter(position == "ligated") %>%
-  group_by(condition, nt) %>%
-  summarise(count = sum(count)) -> sample_counts
-
-sample_counts %>%
+  filter(position == "position_1" & nt != "N") %>%
   group_by(condition) %>%
-  summarise(total_counts = sum(count)) %>%
-  inner_join(sample_counts, by = "condition") %>%
-  mutate(percentage = count / total_counts) -> sample_counts
+  summarise(total_counts = sum(count)) -> condition_counts
 
+#for each nt within each condition, divide the total counts at position_1 of that nt by the total counts at psotion_1 in that condition to get a percentage
+ligation %>%
+  filter(position == "position_1" & nt != "N") %>%
+  group_by(condition, nt) %>%
+  summarise(count = sum(count)) %>%
+  inner_join(condition_counts, by = "condition") %>%
+  mutate(percentage = count / total_counts) %>%
+  select(condition, nt, percentage) -> sample_counts
+
+#merge data and mutate condition and nt into factors with appropriate labels for the figure
 transcriptome_counts %>%
   bind_rows(sample_counts) %>%
-  select(condition, nt, percentage) %>%
-  mutate(condition = factor(condition, 
-                            levels = c("transcriptome", "Hipp / DMS (+)", "Ctrl / DMS (+)", "Hipp / DMS (-)", "Ctrl / DMS (-)"),
-                            ordered = T)) -> merged_data
+  mutate(condition = factor(condition, levels = c("transcriptome", "hippuristanol_plus_DMS", "control_plus_DMS", "hippuristanol_minus_DMS", "control_minus_DMS"),
+                            labels = c("transcriptome", "Hipp / DMS (+)", "Ctrl / DMS (+)", "Hipp / DMS (-)", "Ctrl / DMS (-)"), ordered = T),
+         nt = factor(nt,
+                     levels = c("T", "G", "C", "A"), 
+                     labels = c("U", "G", "C", "A"),
+                     ordered = T)) -> merged_data
 
 #plot
 ligation_plot <- ggplot(data = merged_data, aes(y = percentage, x = condition, fill = nt))+
@@ -107,4 +108,3 @@ ligation_plot <- ggplot(data = merged_data, aes(y = percentage, x = condition, f
 pdf(file = 'ligation.pdf', height = 4, width = 6)
 print(ligation_plot)
 dev.off()
-         
