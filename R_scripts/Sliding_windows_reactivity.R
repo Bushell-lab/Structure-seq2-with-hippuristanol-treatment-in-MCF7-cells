@@ -1,6 +1,5 @@
-###This script was written by Joseph A.Waldron and produces panels 5B-H in Waldron et al. (2019) Genome Biology
-###Input data can be downloaded from the Gene Expression Omnibus (GEO) database accessions GSE134865 and GSE134888 which can be found at 
-###https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134865 and https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134888
+###This script was written by Joseph A.Waldron and produces panels 5B-H in Waldron et al. (2020) Genome Biology
+###Input data first needs to be generated using the Shell scripts from this repository (see README file)
 
 #Imports----
 library(gridExtra)
@@ -9,17 +8,8 @@ library(tidyverse)
 library(BBmisc)
 library(viridis)
 
-#set home directory----
-home <- '' #this needs to be set to the directory containing the data
-
-#set variables----
-#posterior probability thresholds
-positive_change <- 0.25
-no_change <- 0.02
-
-#filter thresholds
-coverage <- 1
-fp_coverage <- 1.5
+#import variables----
+source("Structure_seq_variables.R")
 
 #min 5'UTR length
 min_length <- 50
@@ -99,41 +89,12 @@ scatter_theme <- theme_bw()+
         plot.title = element_text(hjust = 1, vjust = 0, size=14, face="bold"))
 
 #load data----
-#coverage data
-coverage_data <- read_csv(file = file.path(home, 'plus_DMS_coverage.csv'), col_names = T) #download from GSE134865
-ctrl_fp_coverage_data <- read_csv(file = file.path(home, 'control_minus_DMS_fp_10_coverage.csv'), col_names = T) #download from GSE134865
-hipp_fp_coverage_data <- read_csv(file = file.path(home, 'hippuristanol_minus_DMS_fp_10_coverage.csv'), col_names = T) #download from GSE134865
-fp_coverage_data <- inner_join(ctrl_fp_coverage_data, hipp_fp_coverage_data, by = "transcript")
-rm(ctrl_fp_coverage_data, hipp_fp_coverage_data)
-
-#totals data
-totals_data <- read_tsv(file = file.path(home, 'penn-DE.mmdiffMCF7'), col_names = T, skip = 1) #download from GSE134888
-totals_data %>%
-  mutate(abundance = case_when(posterior_probability > positive_change ~ alpha1,
-                               posterior_probability < positive_change ~ alpha0)) %>%
-  rename(transcript = feature_id) %>%
-  select(transcript, abundance) -> abundance_data
-rm(totals_data)
-
-#translation data
-translation_data <- read_tsv(file = file.path(home, 'penn-DOD-gene.mmdiffMCF7'), col_names = T, skip = 1) #download from GSE134888
-translation_data %>%
-  rename(gene = feature_id) %>%
-  mutate(DOD = eta1_1 - eta1_2,
-         translation = factor(case_when(posterior_probability > positive_change & DOD < 0 ~ "4A-dep",
-                                        posterior_probability < no_change ~ "4A-indep"), levels = c("4A-dep", "4A-indep"), ordered = T)) %>%
-  filter(translation == "4A-dep" | translation == "4A-indep" ) %>%
-  select(gene, translation, posterior_probability) -> translation_list
-
-#transcript to gene ID
-transcript_to_geneID <- read_tsv(file = file.path(home, 'MCF7_2015_transcript_to_gene_map.txt'), col_names = T) #download from GSE134865
-
-#5'UTR FASTA composition data
-fpUTR_fasta_composition <- read_csv(file = file.path(home, 'MCF7_2015_fpUTRs_composition.csv'), col_names = T) #download data from GSE134865
+#load common data
+source("Structure_seq_common_data.R")
 
 #windows data
 #uses a for loop to read in sliding window data with window sizes of 15, 20, 25, 30 and 40nt and filter by coverage and 5' coverage
-#download data from GSE134865
+#generate with SF2_pipeline_3f_sliding_window.sh
 windows_data <- list()
 for (wLen in c(15, 20, 25, 30, 40)) {
   windows <- read_csv(file = file.path(home, paste0('control_fpUTR_hippuristanol_fpUTR_', wLen, 'win_', wStep, 'step.csv')), col_names = T)
@@ -290,7 +251,7 @@ wLen <- 20
 
 windows_data[[wLen]] %>%
   inner_join(transcript_to_geneID, by = "transcript") %>%
-  inner_join(fpUTR_fasta_composition, by = "transcript") %>%
+  inner_join(FASTA_compositions_list$fpUTR, by = "transcript") %>%
   filter(length > min_length) %>%
   group_by(gene) %>%
   top_n(n = -1, wt = net_change) %>%
@@ -303,7 +264,7 @@ windows_data[[wLen]] %>%
 
 windows_data[[wLen]] %>%
   inner_join(transcript_to_geneID, by = "transcript") %>%
-  inner_join(fpUTR_fasta_composition, by = "transcript") %>%
+  inner_join(FASTA_compositions_list$fpUTR, by = "transcript") %>%
   filter(length > min_length) %>%
   group_by(gene) %>%
   top_n(n = 1, wt = net_change) %>%
@@ -379,7 +340,7 @@ dev.off()
 #as some transcripts will have more than one window with the same delta reactivity a random window is then selected
 windows_data[[wLen]] %>%
   inner_join(transcript_to_geneID, by = "transcript") %>%
-  inner_join(fpUTR_fasta_composition, by = "transcript") %>%
+  inner_join(FASTA_compositions_list$fpUTR, by = "transcript") %>%
   inner_join(abundance_data, by = "transcript") %>%
   group_by(gene) %>%
   top_n(n = -1, wt = net_change) %>%
