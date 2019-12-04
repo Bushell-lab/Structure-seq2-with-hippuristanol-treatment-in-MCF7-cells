@@ -1,5 +1,11 @@
-###This script was written by Joseph A.Waldron and produces panels 1C, 2E, 4D, S5A-C, G-H, S6A and S7D in Waldron et al. (2020) Genome Biology
+###This script was written by Joseph A. Waldron and produces panels 1C, 2E, 4D, S5A-C, G-H, S6A and S7D in Waldron et al. (2020) Genome Biology
 ###Input data first needs to be generated using the Shell scripts from this repository (see README file)
+
+#set your working directory here
+
+
+#Save the working directory as a string so that we can return here after reading in the csv files
+working_dir <- getwd()
 
 #load packages----
 library(tidyverse)
@@ -135,7 +141,8 @@ for (region in c("fpUTR", "CDS", "tpUTR")) {
 reactivity_data <- do.call("rbind", reactivity_list)
 rm(reactivity_list)
 
-setwd(home)
+#return to your original working directory
+setwd(working_dir)
 
 #bin data----
 #the following three pipes bin the data for each region and calculate the
