@@ -9,7 +9,9 @@ https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134888.
 # Download and splice FASTA file
 First, download the MCF7 specific FASTA file named IsoSeq_MCF7_2015edition_polished.unimapped.fasta from http://datasets.pacb.com.s3.amazonaws.com/2015/IsoSeqHumanMCF7Transcriptome/list.html. With this file in the current directory, first run the reformatting_MCF7_2015_FASTA.py script. This generates a reformatted FASTA named MCF7_2015.fasta, that has a space between the transcript ID and the rest of the information on each header line.
 
-Then splice this new FASTA into a 5'UTR, CDS and 3'UTR FASTA, by running splicing_MCF7_2015_FASTA.py. This script uses the following three files, which are in the data folder of this repository;
+Then splice this new FASTA into a 5'UTR, CDS and 3'UTR FASTA, by running splicing_MCF7_2015_FASTA.py. It uses the output from a blast in which the MCF7_2015 sequences are the subjet and the NM_ RefSeq CDS sequences from release 85 are the query. The 5'UTR length is determined using the output of the blast filtered to the smallest value for the query start per subject transcript. Only when the query start equals position 1, i.e. it aligns with the start of the RefSeq CDS, is the 5'UTR length determined by this blast hit. The 3'UTR length is determined using the output of the blast filtered to the highest value for the query end per subject transcript. Only when the query end equals the length of the RefSeq CDS, i.e. it aligns with the end of the RefSeq CDS, is the 3'UTR length determined by this blast hit. Only transcripts for which both the 5'UTR and 3'UTR lengths are determined, and when the resulting CDS is equally divisible by 3, are spliced.
+
+This script uses the following three files, which are in the data folder of this repository;
 
 All_R_V_HumanRefSeqs_Release85_CDSs_lengths.csv
 NM_CDSs_to_MCF7_2015_blast_eris_start.tsv
