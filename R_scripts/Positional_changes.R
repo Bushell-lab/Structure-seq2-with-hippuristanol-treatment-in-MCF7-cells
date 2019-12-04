@@ -1,27 +1,14 @@
-###This script was written by Joseph A.Waldron and produces panels 1C, 2E, 4D, S5A-C, S5G-H, S6A and S7D in Waldron et al. (2019) Genome Biology
-###Input data can be downloaded from the Gene Expression Omnibus (GEO) database accessions GSE134865 and GSE134888 which can be found at 
-###https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134865 and https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134888
+###This script was written by Joseph A.Waldron and produces panels 1C, 2E, 4D, S5A-C, G-H, S6A and S7D in Waldron et al. (2020) Genome Biology
+###Input data first needs to be generated using the Shell scripts from this repository (see README file)
 
-#load packages
+#load packages----
 library(tidyverse)
 library(grid)
 library(gridExtra)
 library(parallel)
 
-#set home directory----
-home <- '' #this needs to be set to the directory containing the data
-
-#set variables----
-#posterior probability thresholds
-positive_change <- 0.25
-no_change <- 0.02
-
-#filter thresholds
-coverage <- 1
-fp_coverage <- 1.5
-
-#3' end trim length
-tp_trim <- 125
+#import variables----
+source("Structure_seq_variables.R")
 
 #min length of each UTR/CDS
 min_length <- 100
@@ -89,43 +76,8 @@ no_labels_theme <- my_theme+
         axis.text = element_blank())
 
 #load data----
-#coverage data
-coverage_data <- read_csv(file = file.path(home, 'plus_DMS_coverage.csv'), col_names = T) #download from GSE134865
-ctrl_fp_coverage_data <- read_csv(file = file.path(home, 'control_minus_DMS_fp_10_coverage.csv'), col_names = T) #download from GSE134865
-hipp_fp_coverage_data <- read_csv(file = file.path(home, 'hippuristanol_minus_DMS_fp_10_coverage.csv'), col_names = T) #download from GSE134865
-fp_coverage_data <- inner_join(ctrl_fp_coverage_data, hipp_fp_coverage_data, by = "transcript")
-rm(ctrl_fp_coverage_data, hipp_fp_coverage_data)
-
-#totals data
-totals_data <- read_tsv(file = file.path(home, 'penn-DE.mmdiffMCF7'), col_names = T, skip = 1) #download from GSE134888
-totals_data %>%
-  mutate(abundance = case_when(posterior_probability > positive_change ~ alpha1,
-                               posterior_probability < positive_change ~ alpha0)) %>%
-  rename(transcript = feature_id) %>%
-  select(transcript, abundance) -> abundance_data
-rm(totals_data)
-
-#translation data
-translation_data <- read_tsv(file = file.path(home, 'penn-DOD-gene.mmdiffMCF7'), col_names = T, skip = 1) #download from GSE134888
-translation_data %>%
-  rename(gene = feature_id) %>%
-  mutate(DOD = eta1_1 - eta1_2,
-         translation = factor(case_when(posterior_probability > positive_change & DOD < 0 ~ "4A-dep",
-                                        posterior_probability < no_change ~ "4A-indep"), levels = c("4A-dep", "4A-indep"), ordered = T)) -> translation_data
-
-#transcript to gene ID
-transcript_to_geneID <- read_tsv(file = file.path(home, 'MCF7_2015_transcript_to_gene_map.txt'), col_names = T) #download from GSE134865
-
-#FASTA composition data
-#uses a for loop to load composition data for each spliced fasta
-#download data from GSE134865
-FASTA_compositions_list <- list()
-for (region in c("fpUTR", "CDS", "tpUTR")) {
-  df <- read_csv(file = file.path(home, paste0('MCF7_2015_', region, 's_composition.csv')), col_names = T)
-  df$region <- rep(region, nrow(df))
-  FASTA_compositions_list[[region]] <- df
-}
-FASTA_compositions <- do.call("rbind", FASTA_compositions_list)
+#load common data----
+source("Structure_seq_common_data.R")
 
 #make a list of filtered transcripts----
 #the following pipe makes a vector of all transcript IDs that have a 5'UTR, CDS and 3'UTR more than 100nt in length,
@@ -159,8 +111,7 @@ FASTA_compositions %>%
 
 #read in csvs with parLapply----
 #uses a for loop to read in the csv for every transcript in filtered_transcripts for each condition and region
-#a directory containing all transcript csv files for every condition and region can be created by running the react_to_csv.py script on the relevant react file
-#react files can be downloaded from GSE134865 and react_to_csv.py is available at https://github.com/StructureFold2/StructureFold2
+#a directory containing all transcript csv files for every condition and region can be created by running SF2_pipeline_3c_react_CSVs.sh
 
 #Calculate the number of cores
 no_cores <- detectCores() - 1
@@ -168,7 +119,7 @@ no_cores <- detectCores() - 1
 reactivity_list <- list()
 for (region in c("fpUTR", "CDS", "tpUTR")) {
   for (condition in c("control", "hippuristanol")) {
-    setwd(file.path(home, paste(condition, region, 'all_csvs', sep = "_")))
+    setwd(file.path(paste(condition, region, 'all_csvs', sep = "_")))
     csv_list <- dir(pattern = "*.csv") #creates a list of all the csv files in the directory
     filtered_list <- csv_list[lapply(csv_list, get_transcript_ID) %in% filtered_transcripts] #filters the csv list to include only the filtered transcript IDs
     cl <- makeCluster(no_cores) #Initiates cluster
@@ -736,10 +687,10 @@ dev.off()
 
 #aTIS transcripts----
 #read in gene names for MCF7 transcripts
-MCF7_IDs <- read_csv(file = file.path(home, "MCF7_2015_ensembl_IDs.csv"), col_names = T) #download from GSE134865
+MCF7_IDs <- read_csv(file = file.path("MCF7_2015_ensembl_IDs.csv"), col_names = T) #download from the data folder of this repository
 
 #read in uTIS scores
-uTIS_scores <- read_csv(file = file.path(home, "uTIS_scores.csv"), col_names = T) #download from GSE134865 (original data taken from Gao et al. (2015) Nature methods)
+uTIS_scores <- read_csv(file = file.path(home, "GTI_data_uTIS_scores.csv"), col_names = T) #generate with Custom_scripts.sh
 
 #extract filtered transcript IDs with a uTIS score of 0
 uTIS_scores %>%
