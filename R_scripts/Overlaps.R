@@ -1,39 +1,45 @@
 ###This script was written by Joseph A.Waldron and produces panel S7A in Waldron et al. (2019) Genome Biology
-###Input data can be downloaded from the Gene Expression Omnibus (GEO) database accessions GSE134888 which can be found at 
-###https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134888
 
-#Imports
+#Imports----
 library(tidyverse)
 library(VennDiagram)
 
-#set home directory----
-home <- '' #this needs to be set to the directory containing the data
+#import variables----
+source("Structure_seq_variables.R")
 
-#set variables----
-#posterior probability threshold
-positive_change <- 0.25
+#read in data----
+#translation data
+#download from GSE134888 at https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134888
+translation_data <- read_tsv(file = 'GSE134888_penn-DOD-gene.mmdiffMCF7.tsv', col_names = T, skip = 1)
 
-#read in translation data----
-translation_data <- read_csv(file = file.path(home, "penn-DOD-gene.mmdiff90.csv"), col_names = T)
+#Iwasaki et al. data
+#this is supplemental table S2A from Iwasaki et al. (2016) Nature
+high_sensitivity_hipp <- read_csv(file = "nature17978-s2A.csv", col_names = T)
+
+#Modelska et al. data
+#this was created from Supplementary Table 5 from Modelska et al. (2015) Cell Death and Disease
+fourAone_dep <- read_csv(file = "fourAone_dep_transcripts.csv", col_names = T)
+
+#MCF7 gene names
+#can be downloaded from the data folder of this repository
+MCF7_IDs <- read_csv(file = "MCF7_2015_ensembl_IDs.csv", col_names = T)
 
 #pull names of 4A-dep genes
 translation_data %>%
+  inner_join(transcript_to_geneID, by = c("feature_id" = "gene")) %>%
+  inner_join(MCF7_IDs, by = "transcript") %>%
   filter(posterior_probability > positive_change & eta1_1 - eta1_2 < 0) %>%
-  pull(external_gene_name) -> fourAdep_gene_names
+  group_by(Ensembl_gene_symbol) %>%
+  sample_n(size = 1) %>%
+  pull(Ensembl_gene_symbol) -> fourAdep_gene_names
 
-#read in Iwasaki et al. data----
-high_sensitivity_hipp <- read_csv(file = file.path(home, "nature17978-s2A.csv"), col_names = T) #this is supplemental table S2A from Iwasaki et al. (2016) Nature
-
-#pull unique gene names from table
+#pull unique gene names from Iwasaki table
 high_sensitivity_hipp %>%
   group_by(Gene) %>%
   sample_n(size = 1) %>%
   pull(Gene) -> high_sensitivity_hipp_gene_names
 
-#read in Modelska et al. data----
-fourAone_dep <- read_csv(file = file.path(home, "fourAone_dep_transcripts.csv"), col_names = T) #this was created from Supplementary Table 5 from Modelska et al. (2015) Cell Death and Disease
-
-#pull gene names from table
+#pull gene names from Modelska table
 fourAone_dep %>%
   pull(Gene_name) -> fourAone_dep_gene_names
 
