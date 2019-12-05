@@ -32,7 +32,7 @@ translation_data %>%
 #FASTA composition data
 FASTA_compositions_list <- list()
 for (region in c("fpUTR", "CDS", "tpUTR")) {
-  df <- read_csv(file = 'MCF7_2015_', region, 's_composition.csv', col_names = T) #generate with SF2_pipeline_2.sh
+  df <- read_csv(file = paste0('MCF7_2015_', region, 's_composition.csv'), col_names = T) #generate with SF2_pipeline_2.sh
   df$region <- rep(region, nrow(df))
   FASTA_compositions_list[[region]] <- df
 }
