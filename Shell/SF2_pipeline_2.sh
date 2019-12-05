@@ -4,7 +4,7 @@
 #Ensure all input files are in the current directory before running this script
 
 #Calculate coverage
-rtsc_coverage.py MCF7_2015.fasta -rtsc control_plus_DMS_1.rtsc control_plus_DMS_2.rtsc control_plus_DMS_3.rtsc \
+rtsc_coverage.py MCF7_2015.fasta -f control_plus_DMS_1.rtsc control_plus_DMS_2.rtsc control_plus_DMS_3.rtsc \
 hippuristanol_plus_DMS_1.rtsc hippuristanol_plus_DMS_2.rtsc hippuristanol_plus_DMS_3.rtsc -bases AC -name plus_DMS_coverage_all_replicates.csv
 
 #Combine rtsc files
