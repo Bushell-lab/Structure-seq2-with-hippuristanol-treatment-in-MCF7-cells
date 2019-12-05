@@ -125,7 +125,7 @@ no_cores <- detectCores() - 1
 reactivity_list <- list()
 for (region in c("fpUTR", "CDS", "tpUTR")) {
   for (condition in c("control", "hippuristanol")) {
-    setwd(file.path(paste(condition, region, 'all_csvs', sep = "_")))
+    setwd(file.path(working_dir, paste(condition, region, 'all_csvs', sep = "_")))
     csv_list <- dir(pattern = "*.csv") #creates a list of all the csv files in the directory
     filtered_list <- csv_list[lapply(csv_list, get_transcript_ID) %in% filtered_transcripts] #filters the csv list to include only the filtered transcript IDs
     cl <- makeCluster(no_cores) #Initiates cluster
