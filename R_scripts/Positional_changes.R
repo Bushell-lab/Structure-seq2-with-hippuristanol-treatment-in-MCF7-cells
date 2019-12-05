@@ -694,10 +694,10 @@ dev.off()
 
 #aTIS transcripts----
 #read in gene names for MCF7 transcripts
-MCF7_IDs <- read_csv(file = file.path("MCF7_2015_ensembl_IDs.csv"), col_names = T) #download from the data folder of this repository
+MCF7_IDs <- read_csv(file = "MCF7_2015_ensembl_IDs.csv", col_names = T) #download from the data folder of this repository
 
 #read in uTIS scores
-uTIS_scores <- read_csv(file = file.path(home, "GTI_data_uTIS_scores.csv"), col_names = T) #generate with Custom_scripts.sh
+uTIS_scores <- read_csv(file = "GTI_data_uTIS_scores.csv", col_names = T) #generate with Custom_scripts.sh
 
 #extract filtered transcript IDs with a uTIS score of 0
 uTIS_scores %>%
