@@ -1,4 +1,4 @@
-# structure-seq
+# mRNA structural elements immediately upstream of the start codon dictate dependence upon eIF4A helicase activity
 
 This repository contains all the Shell, R and Python scripts used to create the figures within Waldron et al. (2020) Genome Biology.
 
