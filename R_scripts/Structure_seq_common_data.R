@@ -29,6 +29,10 @@ translation_data %>%
          translation = factor(case_when(posterior_probability > positive_change & DOD < 0 ~ "4A-dep",
                                         posterior_probability < no_change ~ "4A-indep"), levels = c("4A-dep", "4A-indep"), ordered = T)) -> translation_data
 
+translation_data %>%
+  filter(translation == "4A-dep" | translation == "4A-indep" ) %>%
+  select(gene, translation, posterior_probability) -> translation_list
+
 #FASTA composition data
 FASTA_compositions_list <- list()
 for (region in c("fpUTR", "CDS", "tpUTR")) {
