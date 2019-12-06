@@ -86,6 +86,7 @@ MFE_data <- do.call("rbind", MFE_data_list)
 
 #merge data----
 MFE_data %>%
+  filter(!(is.na(CT_DeltaG))) %>%
   inner_join(FASTA_compositions_list$fpUTR[, c("transcript", "length")], by = "transcript") %>%
   rename(fpUTR_length = length) %>%
   inner_join(windows_FASTA, by = c("transcript", "step")) %>%
