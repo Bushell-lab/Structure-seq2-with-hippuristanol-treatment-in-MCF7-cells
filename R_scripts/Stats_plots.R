@@ -340,9 +340,16 @@ for (region in c("fpUTR", "CDS", "tpUTR")) {
 
 #MFE and strandedness----
 #filter and summarise
-#The following pipe will filter by coverage and 5' coverage (fp_coverage) and then pick the most abundant transcript per gene
+#The following two pipes will remove transcripts which have an NA for DeltaG or strandedness in either condition
+#filter by coverage and 5' coverage (fp_coverage), pick the most abundant transcript per gene
 #and then calculate the minimum and average MFE and strandedness
+
 structure_statistics %>%
+  filter(is.na(CT_DeltaG) | is.na(CT_double_stranded)) %>%
+  pull(transcript) -> remove_IDs
+
+structure_statistics %>%
+  filter(!(transcript %in% remove_IDs)) %>%
   inner_join(coverage_data, by = "transcript") %>%
   inner_join(fp_coverage_data, by = "transcript") %>%
   inner_join(abundance_data, by = "transcript") %>%
