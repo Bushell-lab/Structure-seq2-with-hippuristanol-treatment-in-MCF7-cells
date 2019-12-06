@@ -50,7 +50,7 @@ source("Structure_seq_common_data.R")
 #windows data
 #generate with SF2_pipeline_3d_folding.sh
 #read in fasta composition of all window sequences and seperate transcript and step into two different variables
-windows_FASTA <- read_csv(file = file.path(paste0('fpUTR_', wLen, 'win_', wStep, 'step_composition.csv')), col_names = T)
+windows_FASTA <- read_csv(file = paste0('fpUTR_', wLen, 'win_', wStep, 'step_composition.csv'), col_names = T)
 windows_FASTA %>%
   mutate(step = as.integer(str_replace(transcript, ".+\\_", "")),
          transcript = str_replace(transcript, "\\_.+", "")) -> windows_FASTA
@@ -59,7 +59,7 @@ windows_FASTA %>%
 #and filter by coverage and 5' coverage and select the most abundant transcript per gene
 MFE_data_list <- list()
 for (condition in c("control", "hippuristanol")) {
-  df <- read_csv(file = file.path(paste0(condition, '_fpUTR_', wLen, 'win_', wStep, 'step_MFE.csv')), col_names = T)
+  df <- read_csv(file = paste0(condition, '_fpUTR_', wLen, 'win_', wStep, 'step_structure_statistics.csv'), col_names = T)
   
   df %>%
     mutate(step = as.integer(str_replace(transcript, ".+\\_", "")),
@@ -80,7 +80,7 @@ for (condition in c("control", "hippuristanol")) {
     group_by(gene) %>%
     top_n(n = 1, wt = abundance) %>% # selects most abundant transcript
     ungroup() %>%
-    select(transcript, Free_Energy, step, condition) -> MFE_data_list[[condition]]
+    select(transcript, CT_DeltaG, step, condition) -> MFE_data_list[[condition]]
 }
 MFE_data <- do.call("rbind", MFE_data_list)
 
@@ -92,7 +92,7 @@ MFE_data %>%
   mutate(GC_content = GC_content * 100) %>%
   rename(windows_GC_content = GC_content,
          wLen = length) %>%
-  select(transcript, Free_Energy, step, condition, fpUTR_length, wLen, windows_GC_content) -> merged_data
+  select(transcript, CT_DeltaG, step, condition, fpUTR_length, wLen, windows_GC_content) -> merged_data
 
 #bin data----
 merged_data %>%
@@ -100,7 +100,7 @@ merged_data %>%
          normalised_position = position / fpUTR_length,
          bin = calculate_bins(normalised_position, bin_n)) %>%
   group_by(condition, transcript, bin) %>%
-  summarise(Free_Energy = mean(Free_Energy),
+  summarise(Free_Energy = mean(CT_DeltaG),
             windows_GC_content = mean(windows_GC_content)) %>%
   ungroup() -> binned_data
 
