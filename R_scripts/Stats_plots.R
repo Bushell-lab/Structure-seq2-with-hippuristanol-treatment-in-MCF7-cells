@@ -76,9 +76,9 @@ stats_list <- list()
 for (region in c("fpUTR", "CDS", "tpUTR")) {
   for (condition in c("control", "hippuristanol")) {
     if (region == "tpUTR") {
-      df <- read_csv(file = file.path(paste0(condition, '_', region, '_', tp_trim, 'trim_20minlen_statistics.csv')), col_names = T)
+      df <- read_csv(file = paste0(condition, '_', region, '_', tp_trim, 'trim_20minlen_statistics.csv'), col_names = T)
     } else {
-      df <- read_csv(file = file.path(paste0(condition, '_', region, '_0trim_20minlen_statistics.csv')), col_names = T)
+      df <- read_csv(file = paste0(condition, '_', region, '_0trim_20minlen_statistics.csv'), col_names = T)
     }
     names(df) <- c("transcript", "max", "average", "std", "gini")
     df$condition <- factor(rep(condition, nrow(df)), levels = c("control", "hippuristanol"), labels = c("Ctrl", "Hipp"), ordered = T)
@@ -88,45 +88,26 @@ for (region in c("fpUTR", "CDS", "tpUTR")) {
 }
 stats_data <- do.call("rbind", stats_list)
 
-#MFE
+#MFE and strandedness
 #uses a for loop to read in MFE data for each each condition for whole 5'UTRs (if 5'UTR <= 100) and windows (if 5'UTR > 100)
 #data can be generated with SF2_pipeline_3d_folding.sh
-MFE_list <- list()
+structure_statistics_list <- list()
 for (condition in c("control", "hippuristanol")) {
-  whole_fpUTRs <- read_csv(file = file.path(paste(condition, 'fpUTR_MFE.csv', sep = "_")), col_names = T)
+  whole_fpUTRs <- read_csv(file = paste(condition, 'fpUTR_structure_statistics.csv', sep = "_"), col_names = T)
   whole_fpUTRs %>%
     mutate(condition = factor(rep(condition), levels = c("control", "hippuristanol"), labels = c("Ctrl", "Hipp"), ordered = T),
            step = rep(0)) -> whole_fpUTRs
   
-  windows <- read_csv(file = file.path(paste(condition, 'fpUTR_100_win_10_step_MFE.csv', sep = "_")), col_names = T)
+  windows <- read_csv(file = paste(condition, 'fpUTR_100win_10step_structure_statistics.csv', sep = "_"), col_names = T)
   windows %>%
     mutate(step = as.numeric(str_replace(transcript, ".+_", "")),
            transcript = str_replace(transcript, "_.+", ""),
            condition = factor(rep(condition), levels = c("control", "hippuristanol"), labels = c("Ctrl", "Hipp"), ordered = T)) -> windows
   
-  MFE_list[[condition]] <- bind_rows(whole_fpUTRs, windows)
+  structure_statistics_list[[condition]] <- bind_rows(whole_fpUTRs, windows)
 }
-MFE <- do.call("rbind", MFE_list)
+structure_statistics <- do.call("rbind", structure_statistics_list)
 
-#Strandedness
-#data can be generated with SF2_pipeline_3d_folding.sh
-#uses a for loop to read in strandedness data for each each condition for whole 5'UTRs (if 5'UTR <= 100) and windows (if 5'UTR > 100)
-strandedness_list <- list()
-for (condition in c("control", "hippuristanol")) {
-  whole_fpUTRs <- read_csv(file = file.path(home, paste(condition, 'fpUTR_strands.csv', sep = "_")), col_names = T)
-  whole_fpUTRs %>%
-    mutate(condition = factor(rep(condition), levels = c("control", "hippuristanol"), labels = c("Ctrl", "Hipp"), ordered = T),
-           step = rep(0)) -> whole_fpUTRs
-  
-  windows <- read_csv(file = file.path(home, paste(condition, 'fpUTR_100_win_10_step_strands.csv', sep = "_")), col_names = T)
-  windows %>%
-    mutate(step = as.numeric(str_replace(transcript, ".+_", "")),
-           transcript = str_replace(transcript, "_.+", ""),
-           condition = factor(rep(condition), levels = c("control", "hippuristanol"), labels = c("Ctrl", "Hipp"), ordered = T)) -> windows
-  
-  strandedness_list[[condition]] <- bind_rows(whole_fpUTRs, windows)
-}
-strandedness <- do.call("rbind", strandedness_list)
 
 #reformat, filter and plot data----
 
@@ -361,11 +342,11 @@ for (region in c("fpUTR", "CDS", "tpUTR")) {
   dev.off()
 }
 
-#MFE----
-#filter
+#MFE and strandedness----
+#filter and summarise
 #The following pipe will filter by coverage and 5' coverage (fp_coverage) and then pick the most abundant transcript per gene
-#and then calculate the minimum and average MFE
-MFE %>%
+#and then calculate the minimum and average MFE and strandedness
+structure_statistics %>%
   inner_join(coverage_data, by = "transcript") %>%
   inner_join(fp_coverage_data, by = "transcript") %>%
   inner_join(abundance_data, by = "transcript") %>%
@@ -382,20 +363,22 @@ MFE %>%
   top_n(n = 1, wt = abundance) %>% # selects most abundant transcript
   ungroup() %>%
   group_by(condition, transcript) %>%
-  summarise(avg_MFE = mean(Free_Energy),
-            min_MFE = min(Free_Energy)) -> summarised_MFE_data
+  summarise(avg_MFE = mean(CT_DeltaG),
+            min_MFE = min(CT_DeltaG),
+            avg_strandedness = mean(CT_double_stranded) * 100,
+            max_strandedness = max(CT_double_stranded) * 100) -> summarised_structure_statistics
 
-print(paste("MFE plots n =", n_distinct(summarised_MFE_data$transcript)))
+print(paste("structure statistics plots n =", n_distinct(summarised_structure_statistics$transcript)))
 
 #plot minimum MFE
-t <- wilcox.test(data = summarised_MFE_data, min_MFE ~ condition,
+t <- wilcox.test(data = summarised_structure_statistics, min_MFE ~ condition,
                  paired = T,
                  alternative = "two.sided",
                  var.equal = F,
                  conf.int = T)
 p_label <- myP(t)
 
-summarised_MFE_data %>%
+summarised_structure_statistics %>%
   ggplot(aes(x = condition, y = min_MFE, fill = condition))+
   geom_violin(alpha = 0.5)+
   geom_boxplot(width = 0.2, outlier.shape=NA)+
@@ -408,7 +391,7 @@ pdf(file = 'min_MFE_violin.pdf', height = 4, width = 4)
 min_MFE_violin
 dev.off()
 
-summarised_MFE_data %>%
+summarised_structure_statistics %>%
   select(transcript, condition, min_MFE) %>%
   spread(key = condition, value = min_MFE) %>%
   ggplot(aes(Ctrl, Hipp))+
@@ -428,14 +411,14 @@ min_MFE_scatter
 dev.off()
 
 #plot average free energy
-t <- wilcox.test(data = summarised_MFE_data, avg_MFE ~ condition,
+t <- wilcox.test(data = summarised_structure_statistics, avg_MFE ~ condition,
                  paired = T,
                  alternative = "two.sided",
                  var.equal = F,
                  conf.int = T)
 p_label <- myP(t)
 
-summarised_MFE_data %>%
+summarised_structure_statistics %>%
   ggplot(aes(x = condition, y = avg_MFE, fill = condition))+
   geom_violin(alpha = 0.5)+
   geom_boxplot(width = 0.2, outlier.shape=NA)+
@@ -448,7 +431,7 @@ pdf(file = 'avg_MFE_violin.pdf', height = 4, width = 4)
 avg_MFE_violin
 dev.off()
 
-summarised_MFE_data %>%
+summarised_structure_statistics %>%
   select(transcript, condition, avg_MFE) %>%
   spread(key = condition, value = avg_MFE) %>%
   ggplot(aes(Ctrl, Hipp))+
@@ -468,7 +451,7 @@ avg_MFE_scatter
 dev.off()
 
 #plot delta of the minimum MFE 
-summarised_MFE_data %>%
+summarised_structure_statistics %>%
   select(transcript, condition, min_MFE) %>%
   spread(key = condition, value = min_MFE) %>%
   mutate(delta = Hipp - Ctrl) %>%
@@ -507,42 +490,15 @@ pdf(file = 'MFE_delta_violin.pdf', height = 4, width = 4)
 MFE_delta_violin
 dev.off()
 
-#strandedness----
-#filter
-#The following pipe will filter by coverage and 5' coverage (fp_coverage) and then pick the most abundant transcript per gene
-#and then calculate the maximum and average strandedness
-#filter and plot
-strandedness %>%
-  inner_join(coverage_data, by = "transcript") %>%
-  inner_join(fp_coverage_data, by = "transcript") %>%
-  inner_join(abundance_data, by = "transcript") %>%
-  inner_join(transcript_to_geneID, by = "transcript") %>%
-  filter(control_plus_DMS_1_coverage > coverage,
-         control_plus_DMS_2_coverage > coverage,
-         control_plus_DMS_3_coverage > coverage,
-         hippuristanol_plus_DMS_1_coverage > coverage,
-         hippuristanol_plus_DMS_2_coverage > coverage,
-         hippuristanol_plus_DMS_3_coverage > coverage,
-         control_minus_DMS_fp_10_coverage > fp_coverage,
-         hippuristanol_minus_DMS_fp_10_coverage > fp_coverage) %>%
-  group_by(gene) %>%
-  top_n(n = 1, wt = abundance) %>% # selects most abundant transcript
-  ungroup() %>%
-  group_by(condition, transcript) %>%
-  summarise(avg_strandedness = mean(double_percent) * 100,
-            max_strandedness = max(double_percent) * 100) -> summarised_strandedness_data
-
-print(paste("strandedness plots n =", n_distinct(summarised_strandedness_data$transcript)))
-
 #plot maximum strandedness
-t <- wilcox.test(data = summarised_strandedness_data, max_strandedness ~ condition,
+t <- wilcox.test(data = summarised_structure_statistics, max_strandedness ~ condition,
                  paired = T,
                  alternative = "two.sided",
                  var.equal = F,
                  conf.int = T)
 p_label <- myP(t)
 
-summarised_strandedness_data %>%
+summarised_structure_statistics %>%
   ggplot(aes(x = condition, y = max_strandedness, fill = condition))+
   geom_violin(alpha = 0.5)+
   geom_boxplot(width = 0.2, outlier.shape=NA)+
@@ -555,7 +511,7 @@ pdf(file = 'max_strandedness_violin.pdf', height = 4, width = 4)
 max_strandedness_violin
 dev.off()
 
-summarised_strandedness_data %>%
+summarised_structure_statistics %>%
   select(transcript, condition, max_strandedness) %>%
   spread(key = condition, value = max_strandedness) %>%
   ggplot(aes(Ctrl, Hipp))+
@@ -575,14 +531,14 @@ max_strandedness_scatter
 dev.off()
 
 #plot average strandedness
-t <- wilcox.test(data = summarised_strandedness_data, avg_strandedness ~ condition,
+t <- wilcox.test(data = summarised_structure_statistics, avg_strandedness ~ condition,
                  paired = T,
                  alternative = "two.sided",
                  var.equal = F,
                  conf.int = T)
 p_label <- myP(t)
 
-summarised_strandedness_data %>%
+summarised_structure_statistics %>%
   ggplot(aes(x = condition, y = avg_strandedness, fill = condition))+
   geom_violin(alpha = 0.5)+
   geom_boxplot(width = 0.2, outlier.shape=NA)+
@@ -595,7 +551,7 @@ pdf(file = 'avg_strandedness_violin.pdf', height = 4, width = 4)
 avg_strandedness_violin
 dev.off()
 
-summarised_strandedness_data %>%
+summarised_structure_statistics %>%
   select(transcript, condition, avg_strandedness) %>%
   spread(key = condition, value = avg_strandedness) %>%
   ggplot(aes(Ctrl, Hipp))+
@@ -615,7 +571,7 @@ avg_strandedness_scatter
 dev.off()
 
 #plot delta of the maximum strandedness
-summarised_strandedness_data %>%
+summarised_structure_statistics %>%
   select(transcript, condition, max_strandedness) %>%
   spread(key = condition, value = max_strandedness) %>%
   mutate(delta = Hipp - Ctrl) %>%
