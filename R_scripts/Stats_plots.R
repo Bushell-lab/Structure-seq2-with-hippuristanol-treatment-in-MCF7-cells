@@ -65,10 +65,6 @@ scatter_theme <- theme_bw()+
 #load common data
 source("Structure_seq_common_data.R")
 
-translation_data %>%
-  filter(translation == "4A-dep" | translation == "4A-indep" ) %>%
-  select(gene, translation, posterior_probability) -> translation_list
-
 #stats data
 #uses a for loop to read in data for each region and each condition
 #data can be generated with SF2_pipeline_3b_statistics.sh
