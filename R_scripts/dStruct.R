@@ -154,7 +154,8 @@ dStruct_output <- dStructome(reactivity_list, reps_A = 3, reps_B = 3,
                      batches = T,
                      check_signal_strength = F,
                      check_nucs = F,
-                     check_quality = T)
+                     check_quality = T,
+                     processes = 1) #'mc.cores' > 1 is not supported on Windows
 
 #assess dStruct windows----
 #the following pipe makes a tibble with the length of each UTR and the CDS for each transcript
