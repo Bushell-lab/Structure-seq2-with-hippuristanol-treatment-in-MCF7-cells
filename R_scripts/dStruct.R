@@ -130,7 +130,7 @@ for (transcript in filtered_transcripts) {
   for (condition in c("control", "hippuristanol")) {
     for (i in 1:3) {
       fyle <- paste0(paste(transcript, condition, i, sep = "_"), ".csv")
-      path <- file.path(paste(condition, i, "all_csvs", sep = "_"))
+      path <- paste(condition, i, "all_csvs", sep = "_")
       df <- read.csv(file = file.path(path, fyle), header = T)
       df$condition <- rep(paste0(condition, i), nrow(df))
       alist[[paste(condition, i, sep = "_")]] <- df
