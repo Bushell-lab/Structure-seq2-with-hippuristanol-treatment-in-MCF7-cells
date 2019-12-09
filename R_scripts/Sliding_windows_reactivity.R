@@ -97,7 +97,7 @@ source("Structure_seq_common_data.R")
 #generate with SF2_pipeline_3f_sliding_window.sh
 windows_data <- list()
 for (wLen in c(15, 20, 25, 30, 40)) {
-  windows <- read_csv(file = file.path(home, paste0('control_fpUTR_hippuristanol_fpUTR_', wLen, 'win_', wStep, 'step.csv')), col_names = T)
+  windows <- read_csv(file = paste0('control_fpUTR_hippuristanol_fpUTR_', wLen, 'win_', wStep, 'step.csv'), col_names = T)
   windows %>%
     mutate(wLen = rep(wLen, nrow(windows))) %>%
     inner_join(coverage_data, by = "transcript") %>%
