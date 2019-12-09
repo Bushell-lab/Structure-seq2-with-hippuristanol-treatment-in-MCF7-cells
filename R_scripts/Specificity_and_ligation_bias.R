@@ -16,7 +16,7 @@ my_theme <- theme_bw()+
 
 #load data----
 #specificity
-specificity <- read_csv(file = "MCF7_2015/raw_data/specificity/specificity.csv", col_names = T) #generated with SF2_pipeline_3a_QC.sh
+specificity <- read_csv(file = "specificity.csv", col_names = T) #generated with SF2_pipeline_3a_QC.sh
 
 #ligation bias
 ligation_list <- list()
