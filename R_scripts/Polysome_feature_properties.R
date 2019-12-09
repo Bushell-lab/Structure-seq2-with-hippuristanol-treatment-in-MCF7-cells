@@ -57,7 +57,6 @@ myTheme <- theme_bw()+
 #load data----
 #load common data
 source("Structure_seq_common_data.R")
-#5'UTR FASTA composition data
 
 #G4 predictions
 G4_data <- read_tsv(file = "fpUTR_G4_screener.tsv", col_names = T) #generate with Custom_scripts.sh
