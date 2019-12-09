@@ -16,13 +16,13 @@ my_theme <- theme_bw()+
 
 #load data----
 #specificity
-specificity <- read_csv(file = file.path(home, "MCF7_2015/raw_data/specificity/specificity.csv"), col_names = T) #generated with SF2_pipeline_3a_QC.sh
+specificity <- read_csv(file = "MCF7_2015/raw_data/specificity/specificity.csv", col_names = T) #generated with SF2_pipeline_3a_QC.sh
 
 #ligation bias
 ligation_list <- list()
 for (condition in c("control_minus_DMS", "control_plus_DMS", "hippuristanol_minus_DMS", "hippuristanol_plus_DMS")) {
   for (replicate in 1:3) {
-    df <- read_csv(file = file.path(home, "ligation_bias", paste(condition, replicate, "ligation_bias.csv", sep = "_")), col_names = T) #generated with SF2_pipeline_1.sh
+    df <- read_csv(file = "ligation_bias", paste(condition, replicate, "ligation_bias.csv", sep = "_"), col_names = T) #generated with SF2_pipeline_1.sh
     df %>%
       mutate(condition = rep(condition, nrow(df)),
              replicate = rep(replicate, nrow(df)),
