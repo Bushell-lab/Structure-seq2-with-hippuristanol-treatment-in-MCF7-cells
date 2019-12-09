@@ -12,7 +12,7 @@ my_theme <- theme_bw()+
         legend.title = element_blank(),
         legend.text = element_text(size=18),
         panel.border = element_blank(),
-        panel.grid = element_blank())+
+        panel.grid = element_blank())
 
 #load data----
 #specificity
@@ -22,7 +22,7 @@ specificity <- read_csv(file = "specificity.csv", col_names = T) #generated with
 ligation_list <- list()
 for (condition in c("control_minus_DMS", "control_plus_DMS", "hippuristanol_minus_DMS", "hippuristanol_plus_DMS")) {
   for (replicate in 1:3) {
-    df <- read_csv(file = "ligation_bias", paste(condition, replicate, "ligation_bias.csv", sep = "_"), col_names = T) #generated with SF2_pipeline_1.sh
+    df <- read_csv(file = paste(condition, replicate, "ligation_bias.csv", sep = "_"), col_names = T) #generated with SF2_pipeline_1.sh
     df %>%
       mutate(condition = rep(condition, nrow(df)),
              replicate = rep(replicate, nrow(df)),
