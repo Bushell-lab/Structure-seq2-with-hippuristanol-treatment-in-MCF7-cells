@@ -38,7 +38,7 @@ cd ../trimmed_fastq_files
 fastq_mapper.py ../FASTA/bowtie2_database/MCF7_2015 -log
 
 #move mapped sam files to a seperate directory
-mv *.SAM ../SAM_files
+mv *.sam ../SAM_files
 mv *.csv ../logs
 
 cd ../SAM_files
