@@ -340,16 +340,13 @@ for (region in c("fpUTR", "CDS", "tpUTR")) {
 
 #MFE and strandedness----
 #filter and summarise
-#The following two pipes will remove transcripts which have an NA for DeltaG or strandedness in either condition
-#filter by coverage and 5' coverage (fp_coverage), pick the most abundant transcript per gene
+#the following line will mutate the DeltaG to 0 for all single stranded RNAs as they are outputted as NA from the structure-Statistics.py script
+structure_statistics$CT_DeltaG[is.na(structure_statistics$CT_DeltaG) & structure_statistics$CT_double_stranded == 0] <- 0
+
+#the following pipe will filter by coverage and 5' coverage (fp_coverage), pick the most abundant transcript per gene
 #and then calculate the minimum and average MFE and strandedness
 
 structure_statistics %>%
-  filter(is.na(CT_DeltaG) | is.na(CT_double_stranded)) %>%
-  pull(transcript) -> remove_IDs
-
-structure_statistics %>%
-  filter(!(transcript %in% remove_IDs)) %>%
   inner_join(coverage_data, by = "transcript") %>%
   inner_join(fp_coverage_data, by = "transcript") %>%
   inner_join(abundance_data, by = "transcript") %>%
