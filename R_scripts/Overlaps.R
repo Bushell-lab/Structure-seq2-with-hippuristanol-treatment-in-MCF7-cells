@@ -1,4 +1,8 @@
 ###This script was written by Joseph A.Waldron and produces panel S7A in Waldron et al. (2019) Genome Biology
+###Note that some of the data required for this script is generated following the mapping of the polysome sequencing reads to the Ensmebl version 90 transcriptome
+###To avoid confusion and difficulties in naming the files appropriately, it was decided not to host this data within GSE134888
+###Please contact us if you require this data as we would be happy to share. We also have a version of this script which uses the data available within GSE134888
+###which prodcues a very similar Venn diagram, which we would also be happy to share on request.
 
 #Imports----
 library(tidyverse)
@@ -9,8 +13,8 @@ source("Structure_seq_variables.R")
 
 #read in data----
 #translation data
-#download from GSE134888 at https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134888
-translation_data <- read_tsv(file = 'GSE134888_penn-DOD-gene.mmdiffMCF7.tsv', col_names = T, skip = 1)
+#contact us if you require this data
+translation_data <- read_csv(file = "penn-DOD-gene.mmdiff90.csv", col_names = T)
 
 #Iwasaki et al. data
 #this is supplemental table S2A from Iwasaki et al. (2016) Nature
@@ -20,18 +24,10 @@ high_sensitivity_hipp <- read_csv(file = "nature17978-s2A.csv", col_names = T)
 #this was created from Supplementary Table 5 from Modelska et al. (2015) Cell Death and Disease
 fourAone_dep <- read_csv(file = "fourAone_dep_transcripts.csv", col_names = T)
 
-#MCF7 gene names
-#can be downloaded from the data folder of this repository
-MCF7_IDs <- read_csv(file = "MCF7_2015_ensembl_IDs.csv", col_names = T)
-
 #pull names of 4A-dep genes
 translation_data %>%
-  inner_join(transcript_to_geneID, by = c("feature_id" = "gene")) %>%
-  inner_join(MCF7_IDs, by = "transcript") %>%
   filter(posterior_probability > positive_change & eta1_1 - eta1_2 < 0) %>%
-  group_by(Ensembl_gene_symbol) %>%
-  sample_n(size = 1) %>%
-  pull(Ensembl_gene_symbol) -> fourAdep_gene_names
+  pull(external_gene_name) -> fourAdep_gene_names
 
 #pull unique gene names from Iwasaki table
 high_sensitivity_hipp %>%
