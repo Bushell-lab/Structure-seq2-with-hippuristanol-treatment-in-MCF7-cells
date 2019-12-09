@@ -80,13 +80,15 @@ for (condition in c("control", "hippuristanol")) {
     group_by(gene) %>%
     top_n(n = 1, wt = abundance) %>% # selects most abundant transcript
     ungroup() %>%
-    select(transcript, CT_DeltaG, step, condition) -> MFE_data_list[[condition]]
+    select(transcript, CT_DeltaG, CT_double_stranded, step, condition) -> MFE_data_list[[condition]]
 }
 MFE_data <- do.call("rbind", MFE_data_list)
 
 #merge data----
+#the following line will mutate the DeltaG to 0 for all single stranded RNAs as they are outputted as NA from the structure-Statistics.py script
+MFE_data$CT_DeltaG[is.na(MFE_data$CT_DeltaG) & MFE_data$CT_double_stranded == 0] <- 0
+
 MFE_data %>%
-  filter(!(is.na(CT_DeltaG))) %>%
   inner_join(FASTA_compositions_list$fpUTR[, c("transcript", "length")], by = "transcript") %>%
   rename(fpUTR_length = length) %>%
   inner_join(windows_FASTA, by = c("transcript", "step")) %>%
