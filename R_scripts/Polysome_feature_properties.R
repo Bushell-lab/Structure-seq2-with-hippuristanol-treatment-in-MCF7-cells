@@ -109,7 +109,7 @@ density_plot <- ggplot(data = merged_data, aes(x = length, colour = translation,
   geom_vline(xintercept = fourAindep_mean, colour = "#fdae61", linetype="dashed", size = 2)+
   myTheme+
   ggtitle(p_label)
-pdf(file = paste0(region, "_length_density.pdf"), width = 4, height = 4)
+pdf(file = "fpUTR_length_density.pdf", width = 4, height = 4)
 print(density_plot)
 dev.off()
 
@@ -134,7 +134,7 @@ density_plot <- ggplot(data = merged_data, aes(x = C_content, colour = translati
   geom_vline(xintercept = fourAindep_mean, colour = "#fdae61", linetype="dashed", size = 2)+
   myTheme+
   ggtitle(p_label)
-pdf(file = paste0(region, "_C_content_density.pdf"), width = 4, height = 4)
+pdf(file = "fpUTR_C_content_density.pdf", width = 4, height = 4)
 print(density_plot)
 dev.off()
 
@@ -159,7 +159,7 @@ density_plot <- ggplot(data = merged_data, aes(x = G_content, colour = translati
   geom_vline(xintercept = fourAindep_mean, colour = "#fdae61", linetype="dashed", size = 2)+
   myTheme+
   ggtitle(p_label)
-pdf(file = paste0(region, "_G_content_density.pdf"), width = 4, height = 4)
+pdf(file = "fpUTR_G_content_density.pdf", width = 4, height = 4)
 print(density_plot)
 dev.off()
 
