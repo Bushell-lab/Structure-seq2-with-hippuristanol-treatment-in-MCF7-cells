@@ -178,7 +178,7 @@ for (motif in c("GGCGGCGGCGGC", "GCCGCCGCCGCC")) {
     scale_fill_manual(values=c("#74add1", "#fdae61"))+
     geom_boxplot(width = 0.2, outlier.shape=NA)+
     ylab(expression(paste("normalised ", Delta, " reactivity")))+
-    ylim(c(-0.3, 0.3))+
+    ylim(c(-0.2, 0.2))+
     violin_theme+
     ggtitle(p_label)+
     stat_summary(fun.y=mean, geom='point', shape=16, size=4)
