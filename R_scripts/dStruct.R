@@ -152,8 +152,8 @@ for (transcript in filtered_transcripts) {
 dStruct_output <- dStructome(reactivity_list, reps_A = 3, reps_B = 3,
                      min_length = 10, 
                      batches = T,
-                     check_signal_strength = F,
-                     check_nucs = F,
+                     check_signal_strength = T,
+                     check_nucs = T,
                      check_quality = T,
                      processes = 1) #'mc.cores' > 1 is not supported on Windows
 
