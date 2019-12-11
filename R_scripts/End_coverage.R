@@ -16,7 +16,7 @@ coverage <- 1
 #the following for loop reads in binned rtsc data across the whole transcript for all transcripts in the 3 different transcriptomes
 df_list <- list()
 for (transcriptome in c("CAGE", "MCF7_2015", "refseq")) {
-  df <- read_csv(file = file.path(transcriptome, "raw_data/rtsc_binned/control_minus_DMS_all_binned.csv"), col_names = T)
+  df <- read_csv(file = file.path(transcriptome, "control_minus_DMS_all_binned.csv"), col_names = T)
   df$transcriptome <- as.factor(rep(transcriptome, nrow(df)))
   df$position <- 1:nrow(df)
   df_list[[transcriptome]] <- df
@@ -28,7 +28,7 @@ binned_data <- do.call("rbind", df_list)
 df_list <- list()
 for (transcriptome in c("CAGE", "MCF7_2015", "refseq")) {
   for (n in c(1:5, 10, 15, 20, 25, 50, 100, 200)) {
-    df <- read_csv(file = file.path(transcriptome, "raw_data/FP_coverage", paste0('control_minus_DMS_FP_', n, '.csv')), col_names = T)
+    df <- read_csv(file = file.path(transcriptome, paste0('control_minus_DMS_FP_', n, '.csv')), col_names = T)
     df$transcriptome <- as.factor(rep(transcriptome, nrow(df)))
     df$n <- rep(n, nrow(df))
     df_list[[paste(transcriptome, n, sep = "_")]] <- df
@@ -41,7 +41,7 @@ FP_coverage_data <- do.call("rbind", df_list)
 df_list <- list()
 for (transcriptome in c("MCF7_2015", "refseq")) {
   for (n in c(seq(0,300,25))) {
-    df <- read_csv(file = file.path(transcriptome, "raw_data/TP_coverage", paste0('control_minus_DMS_TP_50_300_', n, '.csv')), col_names = T)
+    df <- read_csv(file = file.path(transcriptome, paste0('control_minus_DMS_TP_50_300_', n, '.csv')), col_names = T)
     df$transcriptome <- as.factor(rep(transcriptome, nrow(df)))
     df$n <- rep(n, nrow(df))
     df_list[[paste(transcriptome, n, sep = "_")]] <- df
@@ -53,7 +53,7 @@ TP_coverage_data <- do.call("rbind", df_list)
 #the following for loop reads in coverage data for 3 different transcriptomes
 df_list <- list()
 for (transcriptome in c("CAGE", "MCF7_2015", "refseq")) {
-  df <- read_csv(file = file.path(transcriptome, "raw_data/coverage/control_plus_DMS_coverage.csv"), col_names = T)
+  df <- read_csv(file = file.path(transcriptome, "control_plus_DMS_coverage.csv"), col_names = T)
   df$transcriptome <- as.factor(rep(transcriptome, nrow(df)))
   df_list[[transcriptome]] <- df
 }
