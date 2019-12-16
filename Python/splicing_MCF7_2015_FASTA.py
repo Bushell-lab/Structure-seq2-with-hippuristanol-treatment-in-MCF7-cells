@@ -14,8 +14,8 @@ from itertools import islice
 from Bio import SeqIO
 
 class Blast_Hit(object):
-  '''makes a class for blast hits'''
-  def __init__(self, query='',subject='',percent_id=0,align_len=0,mismatches=0,gaps=0,q_start=0,q_end=0,s_start=0,s_end=0,evalue=0,bitscore=0):
+	'''makes a class for blast hits'''
+	def __init__(self, query='',subject='',percent_id=0,align_len=0,mismatches=0,gaps=0,q_start=0,q_end=0,s_start=0,s_end=0,evalue=0,bitscore=0):
 	'''Blast Hit'''
 	self.query = query
 	self.subject = subject
@@ -30,8 +30,8 @@ class Blast_Hit(object):
 	self.evalue = evalue
 	self.bitscore = bitscore
 
-  @classmethod
-  def from_tabular_line(klass, blast_line):
+	@classmethod
+	def from_tabular_line(klass, blast_line):
 	'''Tabular format (BLAST+ -outfmt 6) -> Blast Hit, i.e.: my_hit = Blast_Hit.from_tabular_line(line)'''
 	query, subject, percentid, alignmentlength, mismatches, gaps, qstart, qend, sstart, send, evalue, bitscore = blast_line.strip().split()
 	return klass(query, subject, float(percentid), int(alignmentlength), int(mismatches), int(gaps), int(qstart), int(qend), int(sstart), int(send), float(evalue), float(bitscore))
