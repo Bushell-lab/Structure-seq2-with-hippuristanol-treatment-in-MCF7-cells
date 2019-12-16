@@ -2,9 +2,14 @@
 
 This repository contains all the Shell, R and Python scripts used to create the figures within Waldron et al. (2020) Genome Biology.
 
-Raw sequencing data are available in the Gene Expression Omnibus (GEO) database accessions:
+Once downloaded, ensure that you place all scripts and data into the same directory and run everything from within that directory.
+
+## Download sequencing data
+Raw sequencing data and processed files are available in the Gene Expression Omnibus (GEO) database accessions:
 * [GSE134865](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134865)
 * [GSE134888](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134888)
+
+The raw <.fastq> files do not need to be downloaded, as everything can be replicated from the processed data, which is available as Supplementary files from both GEO accessions.
 
 ## Download and splice FASTA file
 First, download the MCF7 specific FASTA file named IsoSeq_MCF7_2015edition_polished.unimapped.fasta 
