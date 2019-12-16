@@ -33,7 +33,7 @@ so ensure that they and the FASTA file are in the current directory when running
 
 ## Processing Data
 Then run the SF2_pipeline shell scripts to process the sequencing data and generate the files required by the R scripts to make the figures.
-These SF2 scripts call python scripts from the [StructureFold2](https://github.com/StructureFold2/StructureFold2) pipeline.
+These SF2 scripts call python scripts from the [StructureFold2](https://github.com/Bushell-lab/StructureFold2) pipeline.
 Ensure all Software Dependencies for StructureFold2 are downloaded and that the StructureFold2 scripts are in the PATH.
 
 SF2_pipeline_1.sh starts with the raw unprocessed <.fastq> files and generates <.rtsc> and <.react> files for each replicate from each sample. 
