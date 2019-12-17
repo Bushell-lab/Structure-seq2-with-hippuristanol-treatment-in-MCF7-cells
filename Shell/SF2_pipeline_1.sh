@@ -45,12 +45,12 @@ cd ../SAM_files
 sam_filter.py -max_mismatch 4
 
 #move filtered SAM files to a seperate directory
-mv *_filtered.SAM ../filtered_SAM_files
+mv *_filtered.sam ../filtered_SAM_files
 mv *.csv ../logs
 
 #Generate <.rtsc> files
 cd ../filtered_SAM_files
-sam_to_rtsc ../FASTA/MCF7_2015.fasta -trim _trimmed_mapped_filtered
+sam_to_rtsc.py ../FASTA/MCF7_2015.fasta -trim _trimmed_mapped_filtered
 mv *.rtsc ../rtsc_files
 cd ../rtsc_files
 
