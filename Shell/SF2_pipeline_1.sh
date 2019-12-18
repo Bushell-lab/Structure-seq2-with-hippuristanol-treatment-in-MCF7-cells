@@ -56,12 +56,12 @@ cd ../rtsc_files
 
 #Generate <.react> files
 rtsc_to_react.py control_minus_DMS_1.rtsc control_plus_DMS_1.rtsc ../FASTA/MCF7_2015.fasta -name control_1.react
-rtsc_to_react.py control_minus_DMS_2.rtsc control_plus_DMS_2.rtsc ../FASTA/MCF7_2015.fasta -scale control_minus_DMS_1_control_plus_DMS_1_ln_nrm.scale -name control_2.react
-rtsc_to_react.py control_minus_DMS_3.rtsc control_plus_DMS_3.rtsc ../FASTA/MCF7_2015.fasta -scale control_minus_DMS_1_control_plus_DMS_1_ln_nrm.scale -name control_3.react
+rtsc_to_react.py control_minus_DMS_2.rtsc control_plus_DMS_2.rtsc ../FASTA/MCF7_2015.fasta -scale control_1.scale -name control_2.react
+rtsc_to_react.py control_minus_DMS_3.rtsc control_plus_DMS_3.rtsc ../FASTA/MCF7_2015.fasta -scale control_1.scale -name control_3.react
 
-rtsc_to_react.py hippuristanol_minus_DMS_1.rtsc hippuristanol_plus_DMS_1.rtsc ../FASTA/MCF7_2015.fasta -scale control_minus_DMS_1_control_plus_DMS_1_ln_nrm.scale -name hippuristanol_1.react
-rtsc_to_react.py hippuristanol_minus_DMS_2.rtsc hippuristanol_plus_DMS_2.rtsc ../FASTA/MCF7_2015.fasta -scale control_minus_DMS_1_control_plus_DMS_1_ln_nrm.scale -name hippuristanol_2.react
-rtsc_to_react.py hippuristanol_minus_DMS_3.rtsc hippuristanol_plus_DMS_3.rtsc ../FASTA/MCF7_2015.fasta -scale control_minus_DMS_1_control_plus_DMS_1_ln_nrm.scale -name hippuristanol_3.react
+rtsc_to_react.py hippuristanol_minus_DMS_1.rtsc hippuristanol_plus_DMS_1.rtsc ../FASTA/MCF7_2015.fasta -scale control_1.scale -name hippuristanol_1.react
+rtsc_to_react.py hippuristanol_minus_DMS_2.rtsc hippuristanol_plus_DMS_2.rtsc ../FASTA/MCF7_2015.fasta -scale control_1.scale -name hippuristanol_2.react
+rtsc_to_react.py hippuristanol_minus_DMS_3.rtsc hippuristanol_plus_DMS_3.rtsc ../FASTA/MCF7_2015.fasta -scale control_1.scale -name hippuristanol_3.react
 
 mv *.react ../react_files
 cd ..
