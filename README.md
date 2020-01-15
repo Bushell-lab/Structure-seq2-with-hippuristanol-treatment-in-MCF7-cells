@@ -1,8 +1,8 @@
 # mRNA structural elements immediately upstream of the start codon dictate dependence upon eIF4A helicase activity
 
-This repository contains all the Shell, R and Python scripts used to create the figures within Waldron et al. (2020) Genome Biology.
+This repository contains all the Shell, R and Python scripts used to create the figures within Waldron et al. (2019) Genome Biology.
 
-Once downloaded, ensure that you place all scripts and data into the same directory and run everything from within that directory.
+Once downloaded, ensure that you place all scripts and data into the same directory and run everything from within that directory. Ensure the scripts are run in the order described below.
 
 ## Download sequencing data
 Raw sequencing data and processed files are available in the Gene Expression Omnibus (GEO) database accessions:
