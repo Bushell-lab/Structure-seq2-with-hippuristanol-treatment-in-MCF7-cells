@@ -1,4 +1,4 @@
-###This script was written by Joseph A. Waldron and produces Figure S3 from Waldron et al. (2020) Genome Biology
+###This script was written by Joseph A. Waldron and produces Figure S3 from Waldron et al. (2019) Genome Biology
 ###Note that the data required for this script is generated following the mapping of the sequencing reads to two additional transcriptomes
 ###To avoid confusion and difficulties in naming the files appropriately, it was decided not to host the data for this script in this repository
 ###Please contact us if you require this data as we would be happy to share
