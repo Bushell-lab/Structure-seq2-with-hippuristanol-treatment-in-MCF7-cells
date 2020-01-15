@@ -1,4 +1,4 @@
-###This script was written by Joseph A. Waldron and produces panels 2A and 3A in Waldron et al. (2020) Genome Biology
+###This script was written by Joseph A. Waldron and produces panels 2A and 3A in Waldron et al. (2019) Genome Biology
 ###Input data can be downloaded from the Gene Expression Omnibus (GEO) database accession GSE134888 which can be found at 
 ###https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134888
 
