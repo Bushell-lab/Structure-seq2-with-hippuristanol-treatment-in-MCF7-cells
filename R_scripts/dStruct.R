@@ -1,4 +1,4 @@
-###This script was written by Joseph A. Waldron and produces all panels from Figure 6 in Waldron et al. (2020) Genome Biology
+###This script was written by Joseph A. Waldron and produces all panels from Figure 6 in Waldron et al. (2019) Genome Biology
 ###Input data first needs to be generated using the Shell scripts from this repository (see README file)
 ###dStruct package can be downloaded from https://github.com/AviranLab/dStruct
 
