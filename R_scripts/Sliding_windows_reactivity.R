@@ -1,4 +1,4 @@
-###This script was written by Joseph A.Waldron and produces panels 5B-H in Waldron et al. (2020) Genome Biology
+###This script was written by Joseph A.Waldron and produces panels 5B-H in Waldron et al. (2019) Genome Biology
 ###Input data first needs to be generated using the Shell scripts from this repository (see README file)
 
 #Imports----
