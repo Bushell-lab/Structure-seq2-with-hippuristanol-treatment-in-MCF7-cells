@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #This shell script takes the unprocessed <.fastq> files, which are available in the Gene Expression Omnibus (GEO) database accession GSE134865
-#at https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134865 and processes them exactly as in Waldron et al. 2020 Genome Biology.
+#at https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE134865 and processes them exactly as in Waldron et al. 2019 Genome Biology.
 #It generates <.rtsc> and <.react> files for each replicate from each sample. These files can also be downloaded from GSE134865 as supplementary files.
 #It also creates logs on the trimming/mapping/filtering of reads and a csv file that can be used to calculate ligation bias.
 #It uses the StructureFold2 pipeline, which is available at https://github.com/StructureFold2/StructureFold2
