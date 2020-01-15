@@ -1,4 +1,4 @@
-###This script was written by Joseph A. Waldron and produces Figure S2 from Waldron et al. (2020) Genome Biology
+###This script was written by Joseph A. Waldron and produces Figure S2 from Waldron et al. (2019) Genome Biology
 ###Input data first needs to be generated using the the Shell scripts from this repository (see README file)
 
 ###Note that this script requires a lot of memory as the all_rtsc.csv is very large
