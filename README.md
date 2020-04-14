@@ -55,3 +55,5 @@ The SF2_pipeline_3.sh and Custom_scripts.sh scripts can then be run to generate 
 The R scripts can then be used to generate the figures. These scripts read in commonly used data and variables from the 
 Structure_seq_common_data.R and Structure_seq_variables.R scripts respecitively, so ensure that these scripts and all input data 
 are in the current working directory when running these scripts.
+
+#RNA-motif specific activation of eIF4A1 unwinding by multimerisation
