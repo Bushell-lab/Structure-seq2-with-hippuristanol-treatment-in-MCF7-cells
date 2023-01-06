@@ -1,5 +1,6 @@
-###This script was written by Joseph A. Waldron and in combinatin with R10_analysis_2.R produces Figures 4e-g and Extended data Figures 6e-j in Schmidt et al. (in prep)
+###This script was written by Joseph A. Waldron and in combinatin with R10_analysis_2.R produces Figures 2H and Supplementary Figures 2H-J in Schmidt et al. NAR 2023
 ###Input data first needs to be generated using the R10_analysis_1.sh shell script from this repository (see README file)
+###Note that line 244, which uses the sample_n function, throws an error message for versions of R later than version 4
 
 #load packages
 library(tidyverse)
@@ -240,7 +241,7 @@ for (region in c("fpUTR", "CDS", "tpUTR")) {
            step > 4 & step < (max_step - 4)) %>% #ensures the window is at least 50 nt away from the 5' and 3' of the UTR/CDS boundary or the 5' or 3 end of the transcript
     inner_join(motif_counts, by = "transcript") %>%
     group_by(transcript) %>%
-    sample_n(size = n) %>% #selects the same number of random windows as the number or R10 motifs per transcript
+    sample_n(size = n) %>% #selects the same number of random windows as the number or R10 motifs per transcript ###note that versions of R later than 4 this throws an error
     ungroup() -> random_motifs
   
   random_motifs_list[[region]] <- random_motifs[,c("transcript", "step")] #saves the random motif coordinates in a list
@@ -316,7 +317,7 @@ fp_vs_tp_data %>%
   annotate("text", x = 3, y = 0.2, size=4, label = p_label_list[[3]])+
   annotate("text", x = 4, y = 0.2, size=4, label = p_label_list[[4]]) -> fp_vs_tp_delta_box_plot
 
-pdf(file = "Extended_data_Fig_6e_fpUTR_distances_boxplot.pdf", width = 6, height = 4)
+pdf(file = "Supp_Fig_2H_fpUTR_distances_boxplot.pdf", width = 6, height = 4)
 print(fp_vs_tp_delta_box_plot)
 dev.off()
 
@@ -354,173 +355,9 @@ fp_vs_tp_data %>%
   annotate("text", x = 5, y = 0.2, size=4, label = p_label_list[[5]])+
   annotate("text", x = 6, y = 0.2, size=4, label = p_label_list[[6]]) -> fp_vs_tp_delta_box_plot
 
-pdf(file = "Fig_4e_31_50_boxplot.pdf", width = 8, height = 4)
+pdf(file = "Fig_2H_31_50_boxplot.pdf", width = 8, height = 4)
 print(fp_vs_tp_delta_box_plot)
 dev.off()
-
-#1:20 vs 31:50nts for AG and random for each region
-#calculate p-values
-p_label_list <- list()
-for (region in c("fpUTR", "CDS", "tpUTR")) {
-  for (motif  in c("AG", "random")) {
-    df <- fp_vs_tp_data[fp_vs_tp_data$region == region & fp_vs_tp_data$motif == motif,]
-    
-    df %>%
-      select(transcript, start, tp_delta, distance) %>%
-      filter(distance == "1:20" | distance == "31:50") %>%
-      spread(key = distance, value = tp_delta, ) -> df
-    
-    t <- wilcox.test(df$`1:20`, df$`31:50`, paired = T)
-    
-    p_label_list[[paste(region, motif, sep = "_")]] <- myP_numeric(t$p.value)
-  }
-}
-
-#plot
-fp_vs_tp_data %>%
-  filter(distance == "1:20" | distance == "31:50") %>%
-  mutate(distance = factor(distance, levels = c("1:20", "31:50"), ordered = T),
-         x_label = str_c(region, motif, sep = "_"),
-         x_label = factor(x_label, levels = c("fpUTR_AG", "fpUTR_random", "CDS_AG", "CDS_random", "tpUTR_AG", "tpUTR_random"),
-                          labels = c("5\'UTR\nAG", "5\'UTR\nrandom", "CDS\nAG", "CDS\nrandom", "3\'UTR\nAG", "3\'UTR\nrandom"), ordered = T)) %>%
-  ggplot(aes(x = x_label, y = tp_delta, fill = distance))+
-  scale_fill_manual(values=c("#F8766D", "#00BFC4"))+
-  geom_boxplot(outlier.shape=NA)+
-  ylab(expression(paste(Delta, " reactivity")))+
-  ylim(c(-0.2, 0.2))+
-  boxplot_theme+
-  annotate("text", x = 1, y = 0.2, size=4, label = p_label_list[[1]])+
-  annotate("text", x = 2, y = 0.2, size=4, label = p_label_list[[2]])+
-  annotate("text", x = 3, y = 0.2, size=4, label = p_label_list[[3]])+
-  annotate("text", x = 4, y = 0.2, size=4, label = p_label_list[[4]])+
-  annotate("text", x = 5, y = 0.2, size=4, label = p_label_list[[5]])+
-  annotate("text", x = 6, y = 0.2, size=4, label = p_label_list[[6]]) -> fp_vs_tp_delta_box_plot
-
-pdf(file = "Extended_data_Fig_6f_prox_vs_distal_tp_boxplot.pdf", width = 8, height = 4)
-print(fp_vs_tp_delta_box_plot)
-dev.off()
-
-#bars----
-#summarise
-#the following for loop calculates the mean delta reactivity at each position from -50:+50 of every AG motif in each region
-#the mean delta reactivity for the whole motif is collapsed into a single value (position 0)
-summarised_list <- list()
-for (region in c("fpUTR", "CDS", "tpUTR")) {
-  df <- filtered_list[[region]]
-  
-  col_d_start <- which(colnames(df) == "D1") #identifies the first delta reactivity column (-50)
-  col_d_end <- col_d_start + fp + size + tp - 1 #identifies the last delta reactivity column (+50)
-  
-  df %>%
-    select(col_d_start:col_d_end) %>%
-    summarise_all(funs(mean(., na.rm = TRUE))) %>%
-    gather() %>%
-    mutate(position = c(-fp:-1, rep(0, size), 1:tp)) %>%
-    group_by(position) %>%
-    summarise(value = mean(value, na.rm = T)) %>%
-    mutate(region = rep(region)) -> df
-  
-  summarised_list[[region]] <- df
-}
-summarised_data <- do.call("rbind", summarised_list)
-
-#plot
-upper_axis_lim <- (max(summarised_data$value, na.rm = T))
-lower_axis_lim <- (min(summarised_data$value, na.rm = T))
-
-plot_list <- list()
-for (region in c("fpUTR", "CDS", "tpUTR")) {
-  df <- summarised_list[[region]]
-  
-  plot_list[[region]] <- ggplot(data = df, aes(x = position, y = value))+
-    geom_bar(stat = "identity", aes(fill = value))+
-    scale_fill_gradient2(low = 'blue', mid = 'grey88', high = 'red', space = 'Lab', limits=c(lower_axis_lim, upper_axis_lim))+
-    bars_theme+
-    scale_y_continuous(limits = c(lower_axis_lim, upper_axis_lim))+
-    coord_trans(limy = c(lower_axis_lim, upper_axis_lim),
-                limx = c(-50.5, 50.5))+
-    geom_vline(xintercept = -0.5, colour="black", size=0.05)+
-    geom_vline(xintercept = 0.5, colour="black", size=0.05)+
-    ylab(expression(paste(Delta, " reactivity")))
-}
-
-pdf(file = "Extended_data_Fig_6g_bars.pdf", width = 20, height = 4)
-grid.arrange(plot_list[[1]], plot_list[[2]], plot_list[[3]],
-             nrow = 1)
-dev.off()
-
-#windows GC content----
-#31:50 downstream of AG10 vs random motifs in 5'UTRs
-fp_vs_tp_data %>%
-  filter(distance == "31:50",
-         region == "fpUTR") -> df
-
-t <- wilcox.test(data = df, tp_GC_content ~ motif,
-                 paired = F, alternative = "two.sided", var.equal = F, conf.int = T)
-p_label <- myP(t)
-
-df %>%
-  ggplot(aes(x = motif, y = tp_GC_content, fill = motif))+
-  geom_violin(alpha = 0.5, fill = "#00BFC4")+
-  geom_boxplot(width = 0.2, outlier.shape=NA, fill = "#00BFC4")+
-  ylab("GC content (%)")+
-  ylim(c(0, 100))+
-  violin_theme+
-  stat_summary(fun.y=mean, geom='point', shape=16, size=4)+
-  ggtitle(p_label) -> windows_GC_content_violin
-
-#whole 5'UTR GC content----
-#the following pipe identifies all transcripts with R10 motifs (with at least 3 adenines and guanines) in their 5'UTRs
-data_list$fpUTR %>%
-  mutate(motif = str_c(m1, m2, m3, m4, m5, m6, m7, m8, m9, m10)) %>%
-  filter(str_count(motif, "A") > 2 & str_count(motif, "G") > 2) %>%
-  group_by(transcript) %>%
-  sample_n(size = 1) %>% #ensures each transcript is only in the list once (some transcripts have more than 1 R10 motif)
-  pull(transcript) -> R10_IDs
-
-#the following pipe takes all transcripts with 5'UTRs at least 100nt in length, selects the most abundant transcript and
-#creates a factor depending on whether they have an R10 motif in their 5'UTR or not
-FASTA_compositions_list$fpUTR %>%
-  filter(length > 100) %>%
-  inner_join(abundance_data, by = "transcript") %>%
-  inner_join(transcript_to_geneID, by = "transcript") %>%
-  group_by(gene) %>%
-  top_n(n = 1, wt = abundance) %>%
-  ungroup() %>%
-  mutate(GC_content = GC_content * 100,
-         AG10 = factor(case_when(transcript %in% R10_IDs ~ "R10\n5'UTRs",
-                                 !(transcript %in% R10_IDs) ~ "non-R10\n5'UTRs"),
-                       levels = c("R10\n5'UTRs", "non-R10\n5'UTRs"), ordered = T)) %>%
-  select(transcript, AG10, GC_content) -> fpUTR_GC_content_data
-
-#make a size matched group of non-R10 mRNAs
-R10_n <- nrow(fpUTR_GC_content_data[fpUTR_GC_content_data$AG10 == "R10\n5'UTRs",])
-
-set.seed(020588) #sets seed for random selection of size matched group
-
-fpUTR_GC_content_data %>%
-  group_by(AG10) %>%
-  sample_n(size = R10_n) %>%
-  ungroup() -> fpUTR_GC_content_size_matched
-
-#print group sizes and output from wilcoxon test
-summary(fpUTR_GC_content_size_matched)
-
-t <- wilcox.test(data = fpUTR_GC_content_size_matched, GC_content ~ AG10,
-                 paired = F, alternative = "two.sided", var.equal = F, conf.int = T)
-p_label <- myP(t)
-
-#plot
-fpUTR_GC_content_size_matched %>%
-  ggplot(aes(x = AG10, y = GC_content, fill = AG10))+
-  geom_violin(alpha = 0.5)+
-  geom_boxplot(width = 0.2, outlier.shape=NA)+
-  scale_fill_manual(values=c("#74add1", "#fdae61"))+
-  ylab("GC content (%)")+
-  ylim(c(0, 100))+
-  violin_theme+
-  stat_summary(fun.y=mean, geom='point', shape=16, size=4)+
-  ggtitle(p_label) -> whole_fpUTR_GC_content_violin
 
 #windows MFE----
 #generate transcript IDs
