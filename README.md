@@ -1,8 +1,8 @@
 # mRNA structural elements immediately upstream of the start codon dictate dependence upon eIF4A helicase activity
 
 This repository contains all the Shell, R and Python scripts used to create the figures within Waldron et al. (2019) Genome Biology.
-For Schmidt et al. (in prep) please
-[click here](https://github.com/Bushell-lab/Structure-seq2-with-hippuristanol-treatment-in-MCF7-cells#rna-motif-specific-activation-of-eif4a1-unwinding-by-multimerisation).
+For Schmidt et al. (2023) NAR please
+[click here](https://github.com/Bushell-lab/Structure-seq2-with-hippuristanol-treatment-in-MCF7-cells#eIF4A1-dependent-mRNAs-employ-purine-rich-5’UTR-sequences-to-activate-localised-eIF4A1-unwinding-through-eIF4A1-multimerisation-to-facilitate-translation).
 
 Once downloaded, ensure that you place all scripts and data into the same directory and run everything from within that directory. Ensure the scripts are run in the order described below.
 
@@ -58,9 +58,9 @@ The R scripts can then be used to generate the figures. These scripts read in co
 Structure_seq_common_data.R and Structure_seq_variables.R scripts respecitively, so ensure that these scripts and all input data 
 are in the current working directory when running these scripts.
 
-# RNA-motif specific activation of eIF4A1 unwinding by multimerisation
-This following instructions detail the Structure-seq2 analysis pipeline used within Schmidt et al. (in prep).
-The Shell, R and Python scripts described were used to create Figures 4e-g and Extended Data Figures 6 e-j.
+# eIF4A1-dependent mRNAs employ purine-rich 5’UTR sequences to activate localised eIF4A1-unwinding through eIF4A1-multimerisation to facilitate translation
+This following instructions detail the Structure-seq2 analysis pipeline used within Schmidt et al. (2023) NAR.
+The Shell, R and Python scripts described were used to create Figures 2H and Supplementary Figures 2H-J.
 
 First, ensure that the "Download sequencing data" and "Download and splice FASTA file" steps above have been carried out.
 Then process the data. The easiest pipeline involves downloading the <.rtsc> and <.react> files and then running the SF2_pipeline_2.sh script. Alternatively the raw sequencing data as <.fastq> files can be downloaded and processed with the the SF2_pipeline_1.sh script, but this will take several days and will generate very large intermediate files. The Filtering_transcripts.R also needs to be run to generate a flat text files of filtered transcripts with 5'UTR lengths of more or less than 100nt, or this file named "filtered_plus_100_transcripts.txt", can be downloaded from the Data folder of this repository. The The SF2_pipeline_3.sh and Custom_scripts.sh scripts do not need to be run for this analysis.
