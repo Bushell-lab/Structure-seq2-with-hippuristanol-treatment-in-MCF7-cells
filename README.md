@@ -1,8 +1,8 @@
 # mRNA structural elements immediately upstream of the start codon dictate dependence upon eIF4A helicase activity
 
 This repository contains all the Shell, R and Python scripts used to create the figures within Waldron et al. (2019) Genome Biology.
-For Schmidt et al. (2023) NAR please
-[click here](https://github.com/Bushell-lab/Structure-seq2-with-hippuristanol-treatment-in-MCF7-cells#eIF4A1-dependent-mRNAs-employ-purine-rich-5’UTR-sequences-to-activate-localised-eIF4A1-unwinding-through-eIF4A1-multimerisation-to-facilitate-translation).
+
+For Schmidt et al. (2023) NAR please see below
 
 Once downloaded, ensure that you place all scripts and data into the same directory and run everything from within that directory. Ensure the scripts are run in the order described below.
 
